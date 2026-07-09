@@ -740,7 +740,28 @@ agent_instruction:
 
 AI agents should read this block, ask the user for confirmations, and avoid retrying push or bypassing hooks without explicit user direction.
 
-## 14. Implementation Phases
+## 14. Development Approach
+
+DevGuard is implemented with TDD.
+
+For each implementation slice:
+
+1. Write a failing Vitest test or CLI fixture test that describes the required behavior.
+2. Implement the smallest production change needed to pass that test.
+3. Refactor only after the test is green.
+4. Add regression tests for each bug or missed edge case before fixing it.
+5. Keep acceptance tests tied to the user-facing command behavior whenever the slice affects CLI output or hook exit codes.
+
+The preferred test order is:
+
+- Unit tests for pure functions such as path normalization, diff parsing, classification, keyword matching, and risk evaluation.
+- Config and fixture tests for `.devguard.yml`, presets, suppression comments, and generated todos.
+- Integration tests with temporary Git repositories for `doctor`, `check --staged`, `push-check`, and hook installation.
+- Snapshot tests only for stable CLI output blocks, especially summaries and AI-agent confirmation blocks.
+
+Every GitHub issue should include an acceptance checklist that can be verified by tests first. Implementation is not considered complete until the relevant failing tests have been added, made green, and the command-level behavior has been checked.
+
+## 15. Implementation Phases
 
 ### Phase 0: Initialization
 
@@ -801,7 +822,7 @@ AI agents should read this block, ask the user for confirmations, and avoid retr
 - Install `pre-push`.
 - Do not overwrite existing hooks silently.
 
-## 15. Test Plan
+## 16. Test Plan
 
 ### Test Categories
 
@@ -846,7 +867,7 @@ AI agents should read this block, ask the user for confirmations, and avoid retr
 - Remaining variable log blocks push.
 - `--no-verify` can bypass hooks because Git allows it.
 
-## 16. Recommended Build Order
+## 17. Recommended Build Order
 
 Build in this order:
 

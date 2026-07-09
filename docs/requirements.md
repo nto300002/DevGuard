@@ -95,6 +95,7 @@ The initial target user is the project owner.
 
 - Implementation language: TypeScript + Node.js
 - Test framework: Vitest
+- Development approach: TDD, with failing tests written before production code for each implementation slice
 - Runtime form: CLI tool
 - Initial UI: command-line output
 
