@@ -1,0 +1,26 @@
+{
+  "name": "devguard",
+  "version": "0.1.0",
+  "description": "Pre-commit and pre-push self-review CLI for AI-assisted development.",
+  "type": "module",
+  "bin": {
+    "devguard": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
