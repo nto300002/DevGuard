@@ -108,8 +108,8 @@ describe("push todo and agent block generation", () => {
 
     expect(todos.map((todo) => todo.category)).toEqual(expect.arrayContaining(["env", "scope", "log", "test"]));
     expect(block).toContain("[DEVGUARD_AGENT_CONFIRMATION_REQUIRED]");
-    expect(block).toContain("env_secrets_added");
-    expect(block).toContain("Do not run git push again.");
+    expect(block).toContain("環境変数またはsecretの追加");
+    expect(block).toContain("git push を再実行しないでください。");
   });
 });
 
@@ -137,7 +137,7 @@ describe("devguard push-check", () => {
 
     await expect(execFileAsync(tsxBin, [cliPath, "push-check", "--agent-block"], { cwd: repo })).rejects.toMatchObject({
       code: 1,
-      stdout: expect.stringContaining("Push: blocked"),
+      stdout: expect.stringContaining("Push: ブロック"),
     });
   });
 
@@ -149,7 +149,7 @@ describe("devguard push-check", () => {
 
     const { stdout } = await execFileAsync(tsxBin, [cliPath, "push-check"], { cwd: repo });
 
-    expect(stdout).toContain("Push: allowed");
+    expect(stdout).toContain("Push: 許可");
   });
 
   it("prints an agent prompt between files and todos when agent block is requested for allowed pushes", async () => {
@@ -161,9 +161,9 @@ describe("devguard push-check", () => {
     const result = await runPushCheck(repo, { agentBlock: true });
     const output = formatPushCheckResult(result);
 
-    expect(output).toContain("Push: allowed");
-    expect(output).toContain("Risk: medium");
-    expect(output).toContain("Files:\n- none\nAIエージェントがこの出力を見ている場合は、次に進む前にユーザーへ以下を確認してください。");
-    expect(output.indexOf("AIエージェントがこの出力を見ている場合")).toBeLessThan(output.indexOf("Todo:"));
+    expect(output).toContain("Push: 許可");
+    expect(output).toContain("リスク: 中");
+    expect(output).toContain("ファイル:\n- なし\nAIエージェントがこの出力を見ている場合は、次に進む前にユーザーへ以下を確認してください。");
+    expect(output.indexOf("AIエージェントがこの出力を見ている場合")).toBeLessThan(output.indexOf("確認Todo:"));
   });
 });

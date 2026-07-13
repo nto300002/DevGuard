@@ -54,24 +54,31 @@ export function formatHookInstallResult(result: HookInstallResult): string {
   const lines = ["DevGuard install-hooks"];
 
   if (result.installed.length > 0) {
-    lines.push("Installed:");
+    lines.push("インストール済み:");
     for (const hookName of result.installed) {
       lines.push(`- ${hookName}`);
     }
   }
 
   if (result.skipped.length > 0) {
-    lines.push("Skipped:");
+    lines.push("スキップ:");
     for (const skipped of result.skipped) {
-      lines.push(`- ${skipped.hookName} (${skipped.reason})`);
+      lines.push(`- ${skipped.hookName} (${formatSkipReason(skipped.reason)})`);
     }
   }
 
   if (result.installed.length === 0 && result.skipped.length === 0) {
-    lines.push("No hooks changed.");
+    lines.push("変更されたhookはありません。");
   }
 
   return `${lines.join("\n")}\n`;
+}
+
+function formatSkipReason(reason: "already-exists"): string {
+  if (reason === "already-exists") {
+    return "既に存在";
+  }
+  return reason;
 }
 
 async function exists(filePath: string): Promise<boolean> {

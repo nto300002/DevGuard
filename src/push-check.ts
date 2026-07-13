@@ -193,11 +193,11 @@ export function generateAgentBlock(input: { blockedReasons: PushBlockedReason[];
     "[DEVGUARD_AGENT_CONFIRMATION_REQUIRED]",
     "operation=git_push",
     `push_blocked=${input.blockedReasons.length > 0}`,
-    `risk=${input.blockedReasons.length > 0 ? "high" : "medium"}`,
+    `risk=${input.blockedReasons.length > 0 ? "高" : "中"}`,
     "blocked_reasons:",
-    ...input.blockedReasons.map((reason) => `- ${reason}`),
+    ...input.blockedReasons.map((reason) => `- ${formatBlockedReason(reason)}`),
     "files:",
-    ...(input.files.length > 0 ? input.files.map((file) => `- ${file}`) : ["- none"]),
+    ...(input.files.length > 0 ? input.files.map((file) => `- ${file}`) : ["- なし"]),
     "required_user_confirmations:",
     "1. GitHub Secrets / Environment Secrets を設定済みですか？",
     "2. .env.example を更新済みですか？",
@@ -205,10 +205,10 @@ export function generateAgentBlock(input: { blockedReasons: PushBlockedReason[];
     "4. 変数logを削除、または残す理由を書きましたか？",
     "5. 今回の変更に関係するテストまたは手動確認を行いましたか？",
     "agent_instruction:",
-    "- Do not run git push again.",
-    "- Do not bypass hooks.",
-    "- Ask the user the required_user_confirmations.",
-    "- If the user confirms, explain the remaining risk before suggesting next action.",
+    "- git push を再実行しないでください。",
+    "- hookを回避しないでください。",
+    "- required_user_confirmations の内容をユーザーに確認してください。",
+    "- ユーザーが確認した場合も、残るリスクを説明してから次の行動を提案してください。",
     "[/DEVGUARD_AGENT_CONFIRMATION_REQUIRED]",
   ].join("\n");
 }
@@ -223,19 +223,19 @@ export function generateAgentPrompt(): string {
 
 export function formatPushCheckResult(result: PushCheckResult): string {
   const lines: string[] = [];
-  lines.push(`Push: ${result.pushAllowed ? "allowed" : "blocked"}`);
-  lines.push(`Risk: ${result.riskLevel}`);
+  lines.push(`Push: ${result.pushAllowed ? "許可" : "ブロック"}`);
+  lines.push(`リスク: ${formatRiskLevel(result.riskLevel)}`);
 
   if (result.blockedReasons.length > 0) {
-    lines.push("Reason:");
+    lines.push("理由:");
     for (const reason of result.blockedReasons) {
-      lines.push(`- ${reason}`);
+      lines.push(`- ${formatBlockedReason(reason)}`);
     }
   }
 
-  lines.push("Files:");
+  lines.push("ファイル:");
   const files = collectRelatedFiles(result.envFindings, result.scopeFindings, result.logFindings);
-  for (const file of files.length > 0 ? files : ["none"]) {
+  for (const file of files.length > 0 ? files : ["なし"]) {
     lines.push(`- ${file}`);
   }
 
@@ -244,31 +244,31 @@ export function formatPushCheckResult(result: PushCheckResult): string {
   }
 
   if (result.envFindings.length > 0) {
-    lines.push("Env / Secrets:");
+    lines.push("環境変数 / Secrets:");
     for (const finding of result.envFindings) {
       lines.push(`- ${finding.name}`);
-      lines.push(`  source: ${finding.source}`);
-      lines.push(`  file: ${formatFileRef(finding.filePath, finding.lineNumber)}`);
-      lines.push(`  .env.example: ${finding.missingEnvExample ? "missing" : "ok"}`);
+      lines.push(`  参照元: ${finding.source}`);
+      lines.push(`  ファイル: ${formatFileRef(finding.filePath, finding.lineNumber)}`);
+      lines.push(`  .env.example: ${finding.missingEnvExample ? "未追加" : "ok"}`);
     }
   }
 
   if (result.scopeFindings.length > 0) {
-    lines.push("Issue scope warning:");
+    lines.push("Issue scope警告:");
     for (const finding of result.scopeFindings) {
       lines.push(`- ${finding.filePath}`);
-      lines.push(`  category: ${finding.category}`);
+      lines.push(`  カテゴリ: ${formatScopeCategory(finding.category)}`);
     }
   }
 
   if (result.logFindings.length > 0) {
-    lines.push("Log warnings:");
+    lines.push("Log警告:");
     for (const finding of result.logFindings) {
-      lines.push(`- ${finding.kind}: ${formatFileRef(finding.filePath, finding.lineNumber)} ${finding.preview}`);
+      lines.push(`- ${formatLogKind(finding.kind)}: ${formatFileRef(finding.filePath, finding.lineNumber)} ${finding.preview}`);
     }
   }
 
-  lines.push("Todo:");
+  lines.push("確認Todo:");
   for (const todo of result.todos) {
     lines.push(`[ ] ${todo.label}`);
   }
@@ -279,6 +279,41 @@ export function formatPushCheckResult(result: PushCheckResult): string {
   }
 
   return `${lines.join("\n")}\n`;
+}
+
+function formatRiskLevel(level: PushCheckResult["riskLevel"]): string {
+  return {
+    low: "低",
+    medium: "中",
+    high: "高",
+  }[level];
+}
+
+function formatBlockedReason(reason: PushBlockedReason): string {
+  return {
+    env_secrets_added: "環境変数またはsecretの追加",
+    out_of_scope_db_config: "scope外のDB/config変更",
+    personal_strict_variable_log: "変数debug logの残存",
+  }[reason];
+}
+
+function formatScopeCategory(category: ScopeFinding["category"]): string {
+  return {
+    db: "DB",
+    config: "設定",
+    env: "環境変数",
+  }[category];
+}
+
+function formatLogKind(kind: LogFinding["kind"]): string {
+  return {
+    "static-log": "静的debug log",
+    "variable-log": "変数debug log",
+    "sensitive-log": "機密値debug log",
+    "logger-debug": "logger debug",
+    "print-variable": "変数print",
+    "debugger-left": "debugger残留",
+  }[kind];
 }
 
 function resolveDefaultBranch(config: DevGuardConfig): string {

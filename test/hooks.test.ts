@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { installHooks } from "../src/hooks.js";
+import { formatHookInstallResult, installHooks } from "../src/hooks.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -37,6 +37,21 @@ async function exists(filePath: string): Promise<boolean> {
 }
 
 describe("installHooks", () => {
+  it("formats hook installation output in Japanese", () => {
+    expect(
+      formatHookInstallResult({
+        installed: ["pre-commit"],
+        skipped: [{ hookName: "pre-push", reason: "already-exists" }],
+      }),
+    ).toContain("インストール済み:");
+    expect(
+      formatHookInstallResult({
+        installed: [],
+        skipped: [],
+      }),
+    ).toContain("変更されたhookはありません。");
+  });
+
   it("installs executable pre-commit and pre-push hooks", async () => {
     const repo = await createRepo();
 
@@ -91,7 +106,7 @@ describe("installHooks", () => {
       }),
     ).rejects.toMatchObject({
       code: 1,
-      stderr: expect.stringContaining("Risk: high"),
+      stderr: expect.stringContaining("リスク: 高"),
     });
   });
 });

@@ -285,7 +285,7 @@ export async function loadConfig(gitRoot: string): Promise<LoadedConfig> {
   try {
     parsed = parse(await readFile(configPath, "utf8"));
   } catch (error) {
-    throw new ConfigError(`Invalid .devguard.yml: ${error instanceof Error ? error.message : String(error)}`);
+    throw new ConfigError(`.devguard.yml が不正です: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   return {
@@ -302,7 +302,7 @@ export function validateConfig(raw: unknown): DevGuardConfig {
   }
 
   if (!isPlainObject(raw)) {
-    throw new ConfigError(".devguard.yml must be a mapping object");
+    throw new ConfigError(".devguard.yml はmapping objectである必要があります");
   }
 
   const merged = mergeConfig(cloneConfig(DEFAULT_CONFIG), raw);
@@ -342,7 +342,7 @@ function mergeConfig(base: DevGuardConfig, raw: RawConfig): DevGuardConfig {
   if (isPlainObject(raw.presets) && Array.isArray(raw.presets.enabled)) {
     base.presets.enabled = raw.presets.enabled.map((preset) => {
       if (typeof preset !== "string") {
-        throw new ConfigError("presets.enabled must contain only strings");
+        throw new ConfigError("presets.enabled には文字列だけを指定してください");
       }
       return preset as PresetId;
     });
@@ -351,7 +351,7 @@ function mergeConfig(base: DevGuardConfig, raw: RawConfig): DevGuardConfig {
   if (isPlainObject(raw.logPolicy)) {
     const preset = raw.logPolicy.preset;
     if (preset !== undefined && preset !== "personalStrictLog") {
-      throw new ConfigError(`Unsupported logPolicy.preset: ${String(preset)}`);
+      throw new ConfigError(`未対応の logPolicy.preset です: ${String(preset)}`);
     }
 
     base.logPolicy = {
@@ -385,7 +385,7 @@ function mergeConfig(base: DevGuardConfig, raw: RawConfig): DevGuardConfig {
   if (isPlainObject(raw.issueScope)) {
     const defaultMode = raw.issueScope.defaultMode;
     if (defaultMode !== undefined && defaultMode !== "warn" && defaultMode !== "error") {
-      throw new ConfigError(`Unsupported issueScope.defaultMode: ${String(defaultMode)}`);
+      throw new ConfigError(`未対応の issueScope.defaultMode です: ${String(defaultMode)}`);
     }
 
     base.issueScope = {
@@ -405,25 +405,25 @@ function mergeConfig(base: DevGuardConfig, raw: RawConfig): DevGuardConfig {
 
 function validatePresets(enabled: readonly string[]): void {
   if (enabled.length === 0) {
-    throw new ConfigError("presets.enabled must include at least one preset");
+    throw new ConfigError("presets.enabled には少なくとも1つのpresetを指定してください");
   }
 
   for (const preset of enabled) {
     if (!isPresetId(preset)) {
-      throw new ConfigError(`Unknown preset: ${preset}`);
+      throw new ConfigError(`不明なpresetです: ${preset}`);
     }
   }
 }
 
 function validateLogPolicy(preset: string): void {
   if (preset !== "personalStrictLog") {
-    throw new ConfigError(`Unsupported logPolicy.preset: ${preset}`);
+    throw new ConfigError(`未対応の logPolicy.preset です: ${preset}`);
   }
 }
 
 function validateIssueScope(defaultMode: string): void {
   if (defaultMode !== "warn" && defaultMode !== "error") {
-    throw new ConfigError(`Unsupported issueScope.defaultMode: ${defaultMode}`);
+    throw new ConfigError(`未対応の issueScope.defaultMode です: ${defaultMode}`);
   }
 }
 
@@ -437,19 +437,19 @@ function parseAllowedScopes(raw: unknown, fallback: Record<string, { paths: stri
   }
 
   if (!isPlainObject(raw)) {
-    throw new ConfigError("issueScope.allowedScopes must be a mapping object");
+    throw new ConfigError("issueScope.allowedScopes はmapping objectである必要があります");
   }
 
   const scopes: Record<string, { paths: string[] }> = {};
   for (const [scopeName, scopeValue] of Object.entries(raw)) {
     if (!isPlainObject(scopeValue) || !Array.isArray(scopeValue.paths)) {
-      throw new ConfigError(`issueScope.allowedScopes.${scopeName}.paths must be an array`);
+      throw new ConfigError(`issueScope.allowedScopes.${scopeName}.paths は配列である必要があります`);
     }
 
     scopes[scopeName] = {
       paths: scopeValue.paths.map((item) => {
         if (typeof item !== "string") {
-          throw new ConfigError(`issueScope.allowedScopes.${scopeName}.paths must contain only strings`);
+          throw new ConfigError(`issueScope.allowedScopes.${scopeName}.paths には文字列だけを指定してください`);
         }
         return item;
       }),
@@ -463,7 +463,7 @@ function parseTestCommands(raw: RawConfig, fallback: Record<string, { command: s
   const testCommands = { ...fallback };
   for (const [key, value] of Object.entries(raw)) {
     if (!isPlainObject(value) || typeof value.command !== "string") {
-      throw new ConfigError(`testCommands.${key}.command must be a string`);
+      throw new ConfigError(`testCommands.${key}.command は文字列である必要があります`);
     }
     testCommands[key] = { command: value.command };
   }
@@ -475,7 +475,7 @@ function pickStringFields<T extends string>(raw: RawConfig, keys: readonly T[]):
   for (const key of keys) {
     if (raw[key] !== undefined) {
       if (typeof raw[key] !== "string") {
-        throw new ConfigError(`${key} must be a string`);
+        throw new ConfigError(`${key} は文字列である必要があります`);
       }
       result[key] = raw[key];
     }
@@ -488,7 +488,7 @@ function pickBooleanFields<T extends string>(raw: RawConfig, keys: readonly T[])
   for (const key of keys) {
     if (raw[key] !== undefined) {
       if (typeof raw[key] !== "boolean") {
-        throw new ConfigError(`${key} must be a boolean`);
+        throw new ConfigError(`${key} はbooleanである必要があります`);
       }
       result[key] = raw[key];
     }
@@ -501,7 +501,7 @@ function pickNumberFields<T extends string>(raw: RawConfig, keys: readonly T[]):
   for (const key of keys) {
     if (raw[key] !== undefined) {
       if (typeof raw[key] !== "number") {
-        throw new ConfigError(`${key} must be a number`);
+        throw new ConfigError(`${key} はnumberである必要があります`);
       }
       result[key] = raw[key];
     }

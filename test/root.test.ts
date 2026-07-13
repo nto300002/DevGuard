@@ -91,10 +91,10 @@ describe("devguard doctor", () => {
     const { stdout } = await execFileAsync(tsxBin, [cliPath, "doctor"], { cwd: repo });
 
     expect(stdout).toContain("DevGuard doctor");
-    expect(stdout).toContain("inside work tree: true");
-    expect(stdout).toContain(`git root: ${realRepo}`);
-    expect(stdout).toContain("config loaded: false");
-    expect(stdout).toContain("using default config: true");
-    expect(stdout).toContain("separator normalized to /: true");
+    expect(stdout).toContain("作業ツリー内: true");
+    expect(stdout).toContain(`Git root: ${realRepo}`);
+    expect(stdout).toContain("設定読み込み済み: false");
+    expect(stdout).toContain("デフォルト設定を使用: true");
+    expect(stdout).toContain("区切り文字を / に正規化: true");
   });
 });
