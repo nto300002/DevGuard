@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 describe("package metadata", () => {
   it("exposes the devguard CLI command", () => {
     expect(packageJson.bin).toEqual({
-      devguard: "./dist/cli.js",
+      devguard: "dist/cli.js",
     });
   });
 

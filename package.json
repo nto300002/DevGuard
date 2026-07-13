@@ -4,7 +4,7 @@
   "description": "Pre-commit and pre-push self-review CLI for AI-assisted development.",
   "type": "module",
   "bin": {
-    "devguard": "./dist/cli.js"
+    "devguard": "dist/cli.js"
   },
   "files": [
     "dist"
