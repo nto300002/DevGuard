@@ -254,6 +254,13 @@ const DEFAULT_KEYWORD_RULES: KeywordRule[] = [
     patterns: ["eval(", "Function(", "new Function", "innerHTML", "dangerouslySetInnerHTML", "document.write", "exec(", "system(", "shell_exec(", "subprocess.run", "os.system", "Runtime.getRuntime().exec"],
   },
   {
+    id: "browser-storage-risk",
+    label: "Browser storage usage",
+    severity: "medium",
+    targets: ["addedLines"],
+    patterns: ["localStorage", "sessionStorage"],
+  },
+  {
     id: "destructive-db",
     label: "Destructive DB changes",
     severity: "high",

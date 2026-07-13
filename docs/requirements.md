@@ -353,7 +353,7 @@ The MVP does not strictly parse pre-push standard input refs. It uses `defaultBr
 Command:
 
 ```bash
-npx devguard check --staged
+npx @nto300002/devguard check --staged
 ```
 
 Targets:
@@ -382,7 +382,7 @@ Exit codes:
 Command:
 
 ```bash
-npx devguard push-check --agent-block
+npx @nto300002/devguard push-check --agent-block
 ```
 
 Push blockers:

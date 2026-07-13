@@ -54,18 +54,111 @@ devguard push-check
 devguard install-hooks
 ```
 
+## インストール
+
+npm公開版をグローバルインストールする場合:
+
+```bash
+npm install -g @nto300002/devguard
+```
+
+インストール後は `devguard` コマンドを使えます。
+
+```bash
+devguard --help
+devguard doctor
+```
+
+一度だけ実行する場合:
+
+```bash
+npx @nto300002/devguard doctor
+npx @nto300002/devguard check --staged
+```
+
+GitHub Releaseからtarballをダウンロードして導入する場合:
+
+```bash
+npm install -g ./nto300002-devguard-0.1.0.tgz
+```
+
+## ローカルインストール
+
+このリポジトリからローカル開発用に使う場合:
+
+```bash
+npm install
+npm run build
+npm link
+```
+
+link後は、ローカル環境で `devguard` コマンドを使えます。
+
+```bash
+devguard --help
+devguard doctor
+```
+
+linkを解除する場合:
+
+```bash
+npm unlink -g @nto300002/devguard
+```
+
+## ローカルでの使い方
+
+staged差分をcommit前に確認します。
+
+```bash
+git add <files>
+devguard check --staged
+```
+
+branch全体をpush前に確認します。
+
+```bash
+devguard push-check --agent-block
+```
+
+現在のリポジトリにGit hookを導入します。
+
+```bash
+devguard install-hooks
+```
+
+導入されるhookは以下を実行します。
+
+- `pre-commit`: `npx @nto300002/devguard check --staged`
+- `pre-push`: `npx @nto300002/devguard push-check --agent-block`
+
+packageを公開せずにローカル開発版でhookを試す場合は、`DEVGUARD_BIN` で実行コマンドを差し替えられます。
+
+```bash
+DEVGUARD_BIN="node /absolute/path/to/DevGuard/dist/cli.js" git commit -m "test"
+```
+
+## 現在のセキュリティ検出
+
+DevGuardはdefault keyword databaseで以下のセキュリティ関連パターンを検出します。
+
+- `console.log(user)` のような変数debug log
+- `API_KEY`、`TOKEN`、`PASSWORD`、`DATABASE_URL`、`OPENAI_API_KEY` などのsecretらしい名前
+- `${{ secrets.STRIPE_SECRET_KEY }}` のようなGitHub Actions secret参照
+- `eval(`、`innerHTML`、`dangerouslySetInnerHTML` などの危険API
+- `browser-storage-risk` ruleによる `localStorage` / `sessionStorage` 使用
+
 ## Hookの挙動
 
 `pre-commit` では以下を実行します。
 
 ```bash
-npx devguard check --staged
+npx @nto300002/devguard check --staged
 ```
 
 `pre-push` では以下を実行します。
 
 ```bash
-npx devguard push-check --agent-block
+npx @nto300002/devguard push-check --agent-block
 ```
 
 High riskのcommit findingがある場合はcommitを停止します。High riskのpush findingがある場合はpushを停止します。
