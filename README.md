@@ -50,6 +50,9 @@ MVPでは、GitHub OAuth、GitHub Secretsの実在確認、GitHub Issue本文の
 devguard doctor
 devguard init
 devguard check --staged
+devguard check --staged-diff
+devguard check --worktree-diff
+devguard check --all-diff
 devguard push-check
 devguard install-hooks
 ```
@@ -74,6 +77,9 @@ devguard doctor
 ```bash
 npx @nto300002/devguard doctor
 npx @nto300002/devguard check --staged
+npx @nto300002/devguard check --staged-diff
+npx @nto300002/devguard check --worktree-diff
+npx @nto300002/devguard check --all-diff
 ```
 
 GitHub Releaseからtarballをダウンロードして導入する場合:
@@ -113,6 +119,37 @@ staged差分をcommit前に確認します。
 git add <files>
 devguard check --staged
 ```
+
+staged差分のファイル数・変更行数を強めに意識して確認する場合:
+
+```bash
+devguard check --staged-diff
+```
+
+まだ `git add` していない作業ツリー差分を確認する場合:
+
+```bash
+devguard check --worktree-diff
+```
+
+staged / unstaged / untracked をまとめて確認する場合:
+
+```bash
+devguard check --all-diff
+```
+
+差分確認コマンドの使い分け:
+
+- `check --staged`: commit直前のstaged差分を確認
+- `check --staged-diff`: staged差分に加えてPRサイズ目安を強調
+- `check --worktree-diff`: `git add` 前のunstaged / untracked差分を確認
+- `check --all-diff`: HEADから見たstaged / unstaged / untracked差分をまとめて確認
+
+差分サイズの目安:
+
+- 1-5 files / <=150 changed lines: compact PR
+- 6-10 files or 151-300 changed lines: consider splitting
+- 11+ files or 301+ changed lines: split into smaller PRs
 
 branch全体をpush前に確認します。
 

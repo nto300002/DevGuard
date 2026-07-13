@@ -9,9 +9,11 @@ import type { ChangedFile, DiffLine } from "../src/git-diff.js";
 import {
   applySuppressions,
   classifyFiles,
+  evaluateDiffSize,
   detectKeywordFindings,
   detectLogFindings,
   detectRisk,
+  formatDiffSizeWarning,
   generateChecklist,
   parseSuppressionComments,
   resolveTestCommands,
@@ -154,6 +156,28 @@ describe("staged check units", () => {
     expect(generateChecklist(classified).map((item) => item.label)).toContain("Changed screen was opened.");
     expect(suggestCommitPlan(classified).map((item) => item.title)).toEqual(["Frontend changes", "Backend changes"]);
   });
+
+  it("evaluates staged diff size and recommends smaller PRs with concrete thresholds", () => {
+    const files: ChangedFile[] = Array.from({ length: 6 }, (_, index) => ({
+      status: "modified",
+      path: `src/file-${index}.ts`,
+    }));
+    const lines: DiffLine[] = Array.from({ length: 151 }, (_, index) => added("src/file-0.ts", index + 1, `const value${index} = ${index};`));
+
+    const summary = evaluateDiffSize(files, lines);
+
+    expect(summary).toEqual({
+      fileCount: 6,
+      addedLineCount: 151,
+      removedLineCount: 0,
+      changedLineCount: 151,
+      level: "medium",
+      warning: "Staged diff is getting large. Consider splitting this work into smaller PRs.",
+    });
+    expect(formatDiffSizeWarning(summary)).toContain("1-5 files / <=150 changed lines: compact PR");
+    expect(formatDiffSizeWarning(summary)).toContain("6-10 files or 151-300 changed lines: consider splitting");
+    expect(formatDiffSizeWarning(summary)).toContain("11+ files or 301+ changed lines: split into smaller PRs");
+  });
 });
 
 describe("devguard check --staged", () => {
@@ -180,5 +204,49 @@ describe("devguard check --staged", () => {
     expect(stdout).toContain("Risk: medium");
     expect(stdout).toContain("Recommended tests:");
     expect(stdout).toContain("Human checklist:");
+  });
+
+  it("supports check --staged-diff and warns when the staged diff is large", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    for (let index = 0; index < 6; index += 1) {
+      await writeFile(path.join(repo, "src", `file-${index}.ts`), Array.from({ length: 26 }, (_, line) => `export const value${line} = ${line};`).join("\n"));
+    }
+    await git(repo, ["add", "src"]);
+
+    const { stdout } = await execFileAsync(tsxBin, [cliPath, "check", "--staged-diff"], { cwd: repo });
+
+    expect(stdout).toContain("DevGuard check --staged-diff");
+    expect(stdout).toContain("Diff size:");
+    expect(stdout).toContain("- files: 6");
+    expect(stdout).toContain("- changed lines: 156");
+    expect(stdout).toContain("Consider splitting this work into smaller PRs.");
+    expect(stdout).toContain("11+ files or 301+ changed lines: split into smaller PRs");
+  });
+
+  it("supports check --worktree-diff for unstaged and untracked changes", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "worktree.ts"), "console.log(user);\n");
+
+    await expect(execFileAsync(tsxBin, [cliPath, "check", "--worktree-diff"], { cwd: repo })).rejects.toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining("DevGuard check --worktree-diff"),
+    });
+  });
+
+  it("supports check --all-diff for staged and unstaged changes", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "staged.ts"), "localStorage.getItem(key);\n");
+    await git(repo, ["add", "src/staged.ts"]);
+    await writeFile(path.join(repo, "src", "unstaged.ts"), "sessionStorage.getItem(key);\n");
+
+    const { stdout } = await execFileAsync(tsxBin, [cliPath, "check", "--all-diff"], { cwd: repo });
+
+    expect(stdout).toContain("DevGuard check --all-diff");
+    expect(stdout).toContain("src/staged.ts (added)");
+    expect(stdout).toContain("src/unstaged.ts (added)");
+    expect(stdout).toContain("Browser storage usage");
   });
 });

@@ -135,6 +135,59 @@ Required checks:
 - commit split suggestions
 - human review checklist
 
+### `devguard check --staged-diff`
+
+Diagnoses staged changes before commit with explicit diff size guidance.
+
+Required checks:
+
+- staged file paths
+- added line count
+- removed line count
+- changed line count
+- PR size guidance
+
+PR size guidance:
+
+- 1-5 files / <=150 changed lines: compact PR
+- 6-10 files or 151-300 changed lines: consider splitting
+- 11+ files or 301+ changed lines: split into smaller PRs
+
+If the staged diff reaches 6 files or 151 changed lines, DevGuard should warn the user to consider smaller PRs.
+If the staged diff reaches 11 files or 301 changed lines, DevGuard should strongly recommend splitting the work before review.
+
+### `devguard check --worktree-diff`
+
+Diagnoses unstaged and untracked worktree changes before staging.
+
+Required checks:
+
+- unstaged tracked file changes
+- untracked text files
+- keyword rules
+- strict log policy
+- diff size guidance
+
+### `devguard check --all-diff`
+
+Diagnoses all local changes compared with `HEAD`.
+
+Required checks:
+
+- staged changes
+- unstaged tracked file changes
+- untracked text files
+- keyword rules
+- strict log policy
+- diff size guidance
+
+Diff scope naming:
+
+- `--staged`: staged changes only
+- `--staged-diff`: staged changes with explicit size guidance
+- `--worktree-diff`: unstaged and untracked worktree changes
+- `--all-diff`: staged, unstaged, and untracked changes
+
 ### `devguard push-check`
 
 Diagnoses branch-level changes before push.

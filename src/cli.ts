@@ -13,6 +13,9 @@ Usage:
   devguard doctor
   devguard init
   devguard check --staged
+  devguard check --staged-diff
+  devguard check --worktree-diff
+  devguard check --all-diff
   devguard push-check
   devguard install-hooks
   devguard --help
@@ -30,8 +33,11 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     return 0;
   }
 
-  if (args[0] === "check" && args[1] === "--staged") {
-    return runCheckStagedCommand(process.cwd());
+  if (args[0] === "check" && (args[1] === "--staged" || args[1] === "--staged-diff" || args[1] === "--worktree-diff" || args[1] === "--all-diff")) {
+    return runCheckStagedCommand(process.cwd(), {
+      commandName: `check ${args[1]}`,
+      diffScope: args[1] === "--worktree-diff" ? "worktree" : args[1] === "--all-diff" ? "all" : "staged",
+    });
   }
 
   if (args[0] === "doctor") {

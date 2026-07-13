@@ -70,6 +70,40 @@ Responsibilities:
 - Generate commit split suggestions.
 - Evaluate risk and return the correct exit code.
 
+### `devguard check --staged-diff`
+
+Responsibilities:
+
+- Reuse the staged diff collection and risk checks from `check --staged`.
+- Print edited files.
+- Print file count, added line count, removed line count, and changed line count.
+- Print concrete PR size guidance:
+  - 1-5 files / <=150 changed lines: compact PR.
+  - 6-10 files or 151-300 changed lines: consider splitting.
+  - 11+ files or 301+ changed lines: split into smaller PRs.
+- Warn when the staged diff reaches 6 files or 151 changed lines.
+- Strongly recommend splitting when the staged diff reaches 11 files or 301 changed lines.
+
+### `devguard check --worktree-diff`
+
+Responsibilities:
+
+- Reuse risk checks from `check --staged`.
+- Collect `git diff` file paths and hunks for unstaged tracked changes.
+- Collect `git ls-files --others --exclude-standard` for untracked files.
+- Treat readable untracked text files as added lines.
+- Print edited files and diff size guidance.
+
+### `devguard check --all-diff`
+
+Responsibilities:
+
+- Reuse risk checks from `check --staged`.
+- Collect `git diff HEAD` file paths and hunks for staged and unstaged tracked changes.
+- Collect untracked files with `git ls-files --others --exclude-standard`.
+- Treat readable untracked text files as added lines.
+- Print edited files and diff size guidance.
+
 ### `devguard push-check`
 
 Responsibilities:
