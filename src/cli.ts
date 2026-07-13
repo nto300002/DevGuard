@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { runCheckStagedCommand } from "./staged-check.js";
+import { formatHookInstallResult, installHooks } from "./hooks.js";
+import { detectRoot, formatDoctorResult } from "./root.js";
 
 const helpText = `DevGuard
 
@@ -27,6 +29,19 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
 
   if (args[0] === "check" && args[1] === "--staged") {
     return runCheckStagedCommand(process.cwd());
+  }
+
+  if (args[0] === "doctor") {
+    const result = await detectRoot(process.cwd());
+    process.stdout.write(formatDoctorResult(result));
+    return 0;
+  }
+
+  if (args[0] === "install-hooks") {
+    const root = await detectRoot(process.cwd());
+    const result = await installHooks(root.gitRoot);
+    process.stdout.write(formatHookInstallResult(result));
+    return 0;
   }
 
   process.stderr.write(`Unknown command: ${args.join(" ")}\n`);
