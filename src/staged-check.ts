@@ -61,6 +61,17 @@ export type RiskResult = {
   exitCode: 0 | 1;
 };
 
+export type DiffSizeLevel = "compact" | "medium" | "large";
+
+export type DiffSizeSummary = {
+  fileCount: number;
+  addedLineCount: number;
+  removedLineCount: number;
+  changedLineCount: number;
+  level: DiffSizeLevel;
+  warning?: string;
+};
+
 export type TestRecommendation = {
   id: string;
   command: string;
@@ -85,9 +96,14 @@ export type StagedCheckResult = {
   logFindings: LogFinding[];
   suppressions: SuppressionComment[];
   risk: RiskResult;
+  diffSize: DiffSizeSummary;
   recommendedTests: TestRecommendation[];
   checklist: ChecklistItem[];
   commitPlan: CommitPlanItem[];
+};
+
+export type RunCheckStagedCommandOptions = {
+  commandName?: "check --staged" | "check --staged-diff";
 };
 
 export async function runStagedCheck(gitRoot: string): Promise<StagedCheckResult> {
@@ -104,16 +120,17 @@ export async function runStagedCheck(gitRoot: string): Promise<StagedCheckResult
     logFindings,
     suppressions,
     risk: detectRisk([...keywordFindings, ...logFindings]),
+    diffSize: evaluateDiffSize(stagedDiff.files, stagedDiff.lines),
     recommendedTests: resolveTestCommands(classifiedFiles, config),
     checklist: generateChecklist(classifiedFiles),
     commitPlan: suggestCommitPlan(classifiedFiles),
   };
 }
 
-export async function runCheckStagedCommand(cwd: string): Promise<number> {
+export async function runCheckStagedCommand(cwd: string, options: RunCheckStagedCommandOptions = {}): Promise<number> {
   const gitRoot = (await runGit(cwd, ["rev-parse", "--show-toplevel"])).trim();
   const result = await runStagedCheck(gitRoot);
-  process.stdout.write(formatStagedCheckResult(result));
+  process.stdout.write(formatStagedCheckResult(result, options.commandName));
   return result.risk.exitCode;
 }
 
@@ -369,6 +386,62 @@ export function detectRisk(findings: AnyFinding[]): RiskResult {
   return { level: "low", score: 0, exitCode: 0 };
 }
 
+export function evaluateDiffSize(files: ChangedFile[], lines: DiffLine[]): DiffSizeSummary {
+  const fileCount = files.length;
+  const addedLineCount = lines.filter((line) => line.type === "added").length;
+  const removedLineCount = lines.filter((line) => line.type === "removed").length;
+  const changedLineCount = addedLineCount + removedLineCount;
+
+  if (fileCount >= 11 || changedLineCount >= 301) {
+    return {
+      fileCount,
+      addedLineCount,
+      removedLineCount,
+      changedLineCount,
+      level: "large",
+      warning: "Staged diff is large. Split this work into smaller PRs before review.",
+    };
+  }
+
+  if (fileCount >= 6 || changedLineCount >= 151) {
+    return {
+      fileCount,
+      addedLineCount,
+      removedLineCount,
+      changedLineCount,
+      level: "medium",
+      warning: "Staged diff is getting large. Consider splitting this work into smaller PRs.",
+    };
+  }
+
+  return {
+    fileCount,
+    addedLineCount,
+    removedLineCount,
+    changedLineCount,
+    level: "compact",
+  };
+}
+
+export function formatDiffSizeWarning(summary: DiffSizeSummary): string {
+  const lines = [
+    `- files: ${summary.fileCount}`,
+    `- changed lines: ${summary.changedLineCount}`,
+    `- added lines: ${summary.addedLineCount}`,
+    `- removed lines: ${summary.removedLineCount}`,
+    "PR size guide:",
+    "- 1-5 files / <=150 changed lines: compact PR",
+    "- 6-10 files or 151-300 changed lines: consider splitting",
+    "- 11+ files or 301+ changed lines: split into smaller PRs",
+  ];
+
+  if (summary.warning) {
+    lines.push(`Warning: ${summary.warning}`);
+  }
+
+  return lines.join("\n");
+}
+
 export function suggestCommitPlan(classified: ClassifiedFiles): CommitPlanItem[] {
   const plan: CommitPlanItem[] = [];
   const groups: Array<[keyof ClassifiedFiles, string]> = [
@@ -390,9 +463,9 @@ export function suggestCommitPlan(classified: ClassifiedFiles): CommitPlanItem[]
   return plan;
 }
 
-export function formatStagedCheckResult(result: StagedCheckResult): string {
+export function formatStagedCheckResult(result: StagedCheckResult, commandName = "check --staged"): string {
   const lines: string[] = [];
-  lines.push(`DevGuard check --staged`);
+  lines.push(`DevGuard ${commandName}`);
   lines.push(`Risk: ${result.risk.level}`);
   lines.push("");
   lines.push("Files:");
@@ -403,6 +476,10 @@ export function formatStagedCheckResult(result: StagedCheckResult): string {
       lines.push(`- ${file.path} (${file.status})`);
     }
   }
+
+  lines.push("");
+  lines.push("Diff size:");
+  lines.push(formatDiffSizeWarning(result.diffSize));
 
   const findings = [...result.keywordFindings, ...result.logFindings];
   lines.push("");
