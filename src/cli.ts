@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { runCheckStagedCommand } from "./staged-check.js";
+
 const helpText = `DevGuard
 
 Usage:
@@ -21,6 +23,10 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     process.stdout.write(getHelpText());
     return 0;
+  }
+
+  if (args[0] === "check" && args[1] === "--staged") {
+    return runCheckStagedCommand(process.cwd());
   }
 
   process.stderr.write(`Unknown command: ${args.join(" ")}\n`);

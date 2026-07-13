@@ -1,0 +1,162 @@
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { describe, expect, it } from "vitest";
+import type { ChangedFile, DiffLine } from "../src/git-diff.js";
+import {
+  applySuppressions,
+  classifyFiles,
+  detectKeywordFindings,
+  detectLogFindings,
+  detectRisk,
+  generateChecklist,
+  parseSuppressionComments,
+  resolveTestCommands,
+  suggestCommitPlan,
+} from "../src/staged-check.js";
+
+const execFileAsync = promisify(execFile);
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const cliPath = path.join(repoRoot, "src", "cli.ts");
+const tsxBin = path.join(repoRoot, "node_modules", ".bin", "tsx");
+
+async function git(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd });
+  return stdout;
+}
+
+async function createRepo(): Promise<string> {
+  const repo = await mkdtemp(path.join(os.tmpdir(), "devguard-staged-check-"));
+  await git(repo, ["init", "-b", "main"]);
+  await git(repo, ["config", "user.name", "DevGuard Test"]);
+  await git(repo, ["config", "user.email", "devguard@example.com"]);
+  await writeFile(path.join(repo, "README.md"), "# Test\n");
+  await git(repo, ["add", "README.md"]);
+  await git(repo, ["commit", "-m", "initial"]);
+  return repo;
+}
+
+function added(filePath: string, lineNumber: number, content: string): DiffLine {
+  return { type: "added", filePath, lineNumber, content };
+}
+
+describe("staged check units", () => {
+  it("classifies representative files", () => {
+    const files: ChangedFile[] = [
+      { status: "modified", path: "src/components/Button.tsx" },
+      { status: "modified", path: "app/api/users/route.ts" },
+      { status: "modified", path: "prisma/schema.prisma" },
+      { status: "modified", path: "package.json" },
+      { status: "modified", path: "tests/unit.test.ts" },
+    ];
+
+    expect(classifyFiles(files)).toEqual({
+      frontend: ["src/components/Button.tsx"],
+      backend: ["app/api/users/route.ts"],
+      db: ["prisma/schema.prisma"],
+      config: ["package.json"],
+      test: ["tests/unit.test.ts"],
+      docs: [],
+      unknown: [],
+    });
+  });
+
+  it("detects keyword findings", () => {
+    const findings = detectKeywordFindings([added("src/config.ts", 1, "const key = process.env.API_KEY;")]);
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "secrets-credentials",
+        severity: "high",
+        filePath: "src/config.ts",
+        lineNumber: 1,
+      }),
+    );
+  });
+
+  it("categorizes strict log findings", () => {
+    const findings = detectLogFindings([
+      added("src/static.ts", 1, 'console.log("loaded");'),
+      added("src/variable.ts", 2, "console.log(user);"),
+      added("src/debug.ts", 3, "logger.debug(response);"),
+      added("app/main.py", 4, "print(user)"),
+      added("src/token.ts", 5, "console.log(token);"),
+    ]);
+
+    expect(findings.map((finding) => [finding.kind, finding.severity, finding.argumentKind])).toEqual([
+      ["static-log", "medium", "static"],
+      ["variable-log", "high", "variable"],
+      ["logger-debug", "high", "variable"],
+      ["print-variable", "high", "variable"],
+      ["sensitive-log", "high", "sensitive"],
+    ]);
+  });
+
+  it("applies suppression comments only when a reason exists", () => {
+    const lines = [
+      added("src/debug.ts", 1, "// devguard-disable-next-line variable-log -- CLI verbose debug output"),
+      added("src/debug.ts", 2, "console.log(debugInfo);"),
+      added("src/no-reason.ts", 1, "// devguard-disable-next-line variable-log"),
+      added("src/no-reason.ts", 2, "console.log(debugInfo);"),
+    ];
+
+    const suppressions = parseSuppressionComments(lines);
+    const findings = applySuppressions(detectLogFindings(lines), suppressions);
+
+    expect(findings[0]).toMatchObject({
+      suppressed: true,
+      suppressionReason: "CLI verbose debug output",
+    });
+    expect(findings[1]).toMatchObject({
+      suppressed: false,
+    });
+  });
+
+  it("detects Low, Medium, and High risk", () => {
+    expect(detectRisk([]).level).toBe("low");
+    expect(detectRisk([{ severity: "medium", suppressed: false }]).level).toBe("medium");
+    expect(detectRisk([{ severity: "high", suppressed: false }]).level).toBe("high");
+    expect(detectRisk([{ severity: "high", suppressed: true }]).level).toBe("low");
+  });
+
+  it("generates tests, checklist, and commit plan", () => {
+    const classified = classifyFiles([
+      { status: "modified", path: "src/components/Button.tsx" },
+      { status: "modified", path: "services/users.py" },
+    ]);
+
+    expect(resolveTestCommands(classified).map((item) => item.command)).toEqual(expect.arrayContaining(["npm run typecheck", "npm test", "pytest"]));
+    expect(generateChecklist(classified).map((item) => item.label)).toContain("Changed screen was opened.");
+    expect(suggestCommitPlan(classified).map((item) => item.title)).toEqual(["Frontend changes", "Backend changes"]);
+  });
+});
+
+describe("devguard check --staged", () => {
+  it("returns exit code 1 and prints High risk output for variable logs", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "debug.ts"), "console.log(user);\n");
+    await git(repo, ["add", "src/debug.ts"]);
+
+    await expect(execFileAsync(tsxBin, [cliPath, "check", "--staged"], { cwd: repo })).rejects.toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining("Risk: high"),
+    });
+  });
+
+  it("returns exit code 0 and prints Medium risk output for static logs", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "static.ts"), 'console.log("loaded");\n');
+    await git(repo, ["add", "src/static.ts"]);
+
+    const { stdout } = await execFileAsync(tsxBin, [cliPath, "check", "--staged"], { cwd: repo });
+
+    expect(stdout).toContain("Risk: medium");
+    expect(stdout).toContain("Recommended tests:");
+    expect(stdout).toContain("Human checklist:");
+  });
+});
