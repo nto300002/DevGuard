@@ -3,6 +3,7 @@
 import { runCheckStagedCommand } from "./staged-check.js";
 import { formatHookInstallResult, installHooks } from "./hooks.js";
 import { detectRoot, formatDoctorResult } from "./root.js";
+import { runPushCheckCommand } from "./push-check.js";
 
 const helpText = `DevGuard
 
@@ -42,6 +43,15 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     const result = await installHooks(root.gitRoot);
     process.stdout.write(formatHookInstallResult(result));
     return 0;
+  }
+
+  if (args[0] === "push-check") {
+    const root = await detectRoot(process.cwd());
+    const scopeIndex = args.indexOf("--scope");
+    return runPushCheckCommand(root.gitRoot, {
+      agentBlock: args.includes("--agent-block"),
+      scope: scopeIndex >= 0 ? args[scopeIndex + 1] : undefined,
+    });
   }
 
   process.stderr.write(`Unknown command: ${args.join(" ")}\n`);
