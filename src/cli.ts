@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { runCheckStagedCommand } from "./staged-check.js";
+import { formatHookInstallResult, installHooks } from "./hooks.js";
 
 const helpText = `DevGuard
 
@@ -27,6 +28,16 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
 
   if (args[0] === "check" && args[1] === "--staged") {
     return runCheckStagedCommand(process.cwd());
+  }
+
+  if (args[0] === "install-hooks") {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd() });
+    const result = await installHooks(stdout.trim());
+    process.stdout.write(formatHookInstallResult(result));
+    return 0;
   }
 
   process.stderr.write(`Unknown command: ${args.join(" ")}\n`);
