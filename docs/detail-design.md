@@ -90,8 +90,8 @@ Responsibilities:
 - Install `pre-commit` and `pre-push` hooks.
 - Preserve existing hooks and avoid silent overwrite.
 - Make installed hooks executable.
-- Use `npx devguard check --staged` for `pre-commit`.
-- Use `npx devguard push-check --agent-block` for `pre-push`.
+- Use `npx @nto300002/devguard check --staged` for `pre-commit`.
+- Use `npx @nto300002/devguard push-check --agent-block` for `pre-push`.
 
 ## 3. Internal Types
 

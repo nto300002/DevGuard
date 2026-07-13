@@ -15,13 +15,13 @@ const HOOKS: Record<HookName, string> = {
   "pre-commit": `#!/bin/sh
 set -e
 
-DEVGUARD_BIN="\${DEVGUARD_BIN:-npx devguard}"
+DEVGUARD_BIN="\${DEVGUARD_BIN:-npx @nto300002/devguard}"
 $DEVGUARD_BIN check --staged
 `,
   "pre-push": `#!/bin/sh
 set -e
 
-DEVGUARD_BIN="\${DEVGUARD_BIN:-npx devguard}"
+DEVGUARD_BIN="\${DEVGUARD_BIN:-npx @nto300002/devguard}"
 $DEVGUARD_BIN push-check --agent-block
 `,
 };

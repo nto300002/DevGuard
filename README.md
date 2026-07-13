@@ -54,6 +54,28 @@ devguard push-check
 devguard install-hooks
 ```
 
+## インストール
+
+npmで公開されているパッケージをグローバルインストールする場合:
+
+```bash
+npm install -g @nto300002/devguard
+```
+
+インストール後は `devguard` コマンドを使えます。
+
+```bash
+devguard --help
+devguard doctor
+```
+
+一度だけ実行する場合:
+
+```bash
+npx @nto300002/devguard doctor
+npx @nto300002/devguard check --staged
+```
+
 ## ローカルインストール
 
 このリポジトリからローカル開発用に使う場合:
@@ -74,7 +96,7 @@ devguard doctor
 linkを解除する場合:
 
 ```bash
-npm unlink -g devguard
+npm unlink -g @nto300002/devguard
 ```
 
 ## ローカルでの使い方
@@ -100,8 +122,8 @@ devguard install-hooks
 
 導入されるhookは以下を実行します。
 
-- `pre-commit`: `npx devguard check --staged`
-- `pre-push`: `npx devguard push-check --agent-block`
+- `pre-commit`: `npx @nto300002/devguard check --staged`
+- `pre-push`: `npx @nto300002/devguard push-check --agent-block`
 
 packageを公開せずにローカル開発版でhookを試す場合は、`DEVGUARD_BIN` で実行コマンドを差し替えられます。
 
@@ -124,13 +146,13 @@ DevGuardはdefault keyword databaseで以下のセキュリティ関連パター
 `pre-commit` では以下を実行します。
 
 ```bash
-npx devguard check --staged
+npx @nto300002/devguard check --staged
 ```
 
 `pre-push` では以下を実行します。
 
 ```bash
-npx devguard push-check --agent-block
+npx @nto300002/devguard push-check --agent-block
 ```
 
 High riskのcommit findingがある場合はcommitを停止します。High riskのpush findingがある場合はpushを停止します。
