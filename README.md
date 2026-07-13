@@ -56,7 +56,7 @@ devguard install-hooks
 
 ## インストール
 
-npmで公開されているパッケージをグローバルインストールする場合:
+npm公開版をグローバルインストールする場合:
 
 ```bash
 npm install -g @nto300002/devguard
@@ -74,6 +74,12 @@ devguard doctor
 ```bash
 npx @nto300002/devguard doctor
 npx @nto300002/devguard check --staged
+```
+
+GitHub Releaseからtarballをダウンロードして導入する場合:
+
+```bash
+npm install -g ./nto300002-devguard-0.1.0.tgz
 ```
 
 ## ローカルインストール
