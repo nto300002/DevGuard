@@ -56,7 +56,7 @@ export async function runPushCheck(gitRoot: string, options: PushCheckOptions = 
   const envExampleKeys = await readEnvExampleKeys(gitRoot);
   const envFindings = config.envConsistency.enabled ? envConsistencyCheck(diff.lines, envExampleKeys) : [];
   const scope = options.scope ?? "frontend";
-  const scopeFindings = config.issueScope.enabled ? issueScopeCheck(diff.files, scope ?? options.scope ?? "frontend") : [];
+  const scopeFindings = config.issueScope.enabled ? issueScopeCheck(diff.files, scope) : [];
   const logFindings = detectLogFindings(diff.lines).filter((finding) => !finding.suppressed && (finding.kind === "variable-log" || finding.kind === "sensitive-log" || finding.kind === "logger-debug" || finding.kind === "print-variable"));
   const blockedReasons = getBlockedReasons({ envFindings, scopeFindings, logFindings, config });
   const todos = generatePushTodos({ envFindings, scopeFindings, logFindings });
