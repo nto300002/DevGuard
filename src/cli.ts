@@ -2,6 +2,7 @@
 
 import { runCheckStagedCommand } from "./staged-check.js";
 import { formatHookInstallResult, installHooks } from "./hooks.js";
+import { detectRoot, formatDoctorResult } from "./root.js";
 
 const helpText = `DevGuard
 
@@ -30,12 +31,15 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     return runCheckStagedCommand(process.cwd());
   }
 
+  if (args[0] === "doctor") {
+    const result = await detectRoot(process.cwd());
+    process.stdout.write(formatDoctorResult(result));
+    return 0;
+  }
+
   if (args[0] === "install-hooks") {
-    const { execFile } = await import("node:child_process");
-    const { promisify } = await import("node:util");
-    const execFileAsync = promisify(execFile);
-    const { stdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd() });
-    const result = await installHooks(stdout.trim());
+    const root = await detectRoot(process.cwd());
+    const result = await installHooks(root.gitRoot);
     process.stdout.write(formatHookInstallResult(result));
     return 0;
   }
