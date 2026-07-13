@@ -1,40 +1,40 @@
 # DevGuard
 
-DevGuard is a TypeScript + Node.js CLI tool that helps developers stop and review risky changes before `git commit` and `git push`.
+DevGuardは、`git commit` や `git push` の前に危険な変更を検出し、開発者が一度立ち止まって確認できるようにする TypeScript + Node.js 製のCLIツールです。
 
-It is designed for AI-assisted development and ADHD-friendly workflows where the common failure mode is not only code quality, but missed confirmation steps: broad commits, forgotten debug logs, missing environment variable updates, out-of-scope DB/config changes, and vague pre-review checks.
+AIコーディングやADHD傾向のある開発フローでは、コード品質そのものよりも「確認漏れ」が問題になりがちです。DevGuardは、commit粒度の粗さ、debug logの消し忘れ、環境変数やSecretsの確認漏れ、Issueスコープ外のDB/config変更、レビュー前確認の曖昧さをGit操作前に可視化します。
 
-## Concept
+## コンセプト
 
-DevGuard is a pre-commit and pre-push self-review assistant for the AI coding era.
+DevGuardは、AI時代のpre-commit / pre-push型セルフレビュー支援ツールです。
 
-It does not write code like Copilot and it does not replace a reviewer. Instead, it analyzes Git diffs immediately before Git operations and makes the developer explain what changed, what is risky, and what still needs human confirmation.
+Copilotのようにコードを書くツールではなく、レビュー担当者を置き換えるものでもありません。Git操作の直前に差分を解析し、「何を変更したか」「何が危険か」「人間がまだ確認すべきことは何か」を説明できる状態に整えるためのガードです。
 
-## MVP Scope
+## MVPスコープ
 
-The MVP focuses on:
+MVPでは以下に注力します。
 
-- Git root detection from any subdirectory
-- Root-relative path normalization
-- `.devguard.yml` loading with safe defaults
+- 任意のサブディレクトリからのGit root検出
+- Git root相対パスへの正規化
+- `.devguard.yml` の読み込みとdefault config
 - `devguard doctor`
 - `devguard check --staged`
 - `devguard push-check`
-- `defaultBranch...HEAD` diff analysis
-- Keyword rules
-- Strict debug-log detection
-- Suppression comments with required reasons
-- Environment and secrets consistency checks
-- Issue scope checks
-- Manual test confirmation todos
-- AI-agent confirmation blocks
-- `pre-commit` and `pre-push` hook installation
+- `defaultBranch...HEAD` 差分解析
+- keyword rule
+- 厳しめのdebug log検出
+- reason必須の抑制コメント
+- 環境変数 / Secrets の整合性チェック
+- Issueスコープチェック
+- 手動テスト確認todo
+- AIエージェント向け確認ブロック
+- `pre-commit` / `pre-push` hook導入
 
-The MVP intentionally excludes GitHub OAuth, live GitHub Secrets verification, GitHub Issue body fetching, Web UI, VS Code extensions, AST analysis, automatic fixes, and AI code correctness judgment.
+MVPでは、GitHub OAuth、GitHub Secretsの実在確認、GitHub Issue本文の取得、Web UI、VS Code拡張、AST解析、自動修正、AI生成コードの正しさ判定は扱いません。
 
-## Target Technologies
+## 対象技術
 
-Initial presets:
+初期preset:
 
 - TypeScript
 - Python
@@ -42,9 +42,9 @@ Initial presets:
 - Next.js
 - FastAPI
 
-Other ecosystems may appear in the default keyword database, but they are not enabled as first-class MVP presets.
+その他の技術スタックもdefault keyword databaseには含まれる場合がありますが、MVPの正式presetとしては有効化しません。
 
-## Commands
+## コマンド
 
 ```bash
 devguard doctor
@@ -54,9 +54,9 @@ devguard push-check
 devguard install-hooks
 ```
 
-## Local Installation
+## ローカルインストール
 
-For local development from this repository:
+このリポジトリからローカル開発用に使う場合:
 
 ```bash
 npm install
@@ -64,82 +64,82 @@ npm run build
 npm link
 ```
 
-After linking, the `devguard` command is available locally:
+link後は、ローカル環境で `devguard` コマンドを使えます。
 
 ```bash
 devguard --help
 devguard doctor
 ```
 
-To remove the local link later:
+linkを解除する場合:
 
 ```bash
 npm unlink -g devguard
 ```
 
-## Local Usage
+## ローカルでの使い方
 
-Run a staged pre-commit check:
+staged差分をcommit前に確認します。
 
 ```bash
 git add <files>
 devguard check --staged
 ```
 
-Run a branch-level pre-push check:
+branch全体をpush前に確認します。
 
 ```bash
 devguard push-check --agent-block
 ```
 
-Install Git hooks in the current repository:
+現在のリポジトリにGit hookを導入します。
 
 ```bash
 devguard install-hooks
 ```
 
-Installed hooks run:
+導入されるhookは以下を実行します。
 
 - `pre-commit`: `npx devguard check --staged`
 - `pre-push`: `npx devguard push-check --agent-block`
 
-For local development without publishing the package, hooks can be tested by overriding the binary:
+packageを公開せずにローカル開発版でhookを試す場合は、`DEVGUARD_BIN` で実行コマンドを差し替えられます。
 
 ```bash
 DEVGUARD_BIN="node /absolute/path/to/DevGuard/dist/cli.js" git commit -m "test"
 ```
 
-## Current Security Detection
+## 現在のセキュリティ検出
 
-DevGuard detects these security-related patterns in the default keyword database:
+DevGuardはdefault keyword databaseで以下のセキュリティ関連パターンを検出します。
 
-- variable debug logs such as `console.log(user)`
-- secret-like names such as `API_KEY`, `TOKEN`, `PASSWORD`, `DATABASE_URL`, and `OPENAI_API_KEY`
-- GitHub Actions secret references such as `${{ secrets.STRIPE_SECRET_KEY }}`
-- dangerous APIs such as `eval(`, `innerHTML`, and `dangerouslySetInnerHTML`
-- browser storage usage through `localStorage` and `sessionStorage` via the `browser-storage-risk` rule
+- `console.log(user)` のような変数debug log
+- `API_KEY`、`TOKEN`、`PASSWORD`、`DATABASE_URL`、`OPENAI_API_KEY` などのsecretらしい名前
+- `${{ secrets.STRIPE_SECRET_KEY }}` のようなGitHub Actions secret参照
+- `eval(`、`innerHTML`、`dangerouslySetInnerHTML` などの危険API
+- `browser-storage-risk` ruleによる `localStorage` / `sessionStorage` 使用
 
-## Hook Behavior
+## Hookの挙動
 
-`pre-commit` runs:
+`pre-commit` では以下を実行します。
 
 ```bash
 npx devguard check --staged
 ```
 
-`pre-push` runs:
+`pre-push` では以下を実行します。
 
 ```bash
 npx devguard push-check --agent-block
 ```
 
-High-risk commit findings stop the commit. High-risk push findings stop the push.
+High riskのcommit findingがある場合はcommitを停止します。High riskのpush findingがある場合はpushを停止します。
 
-## Documentation
+## ドキュメント
 
-- [Requirements](docs/requirements.md)
-- [Detailed Design](docs/detail-design.md)
+- [要件定義](docs/requirements.md)
+- [詳細定義](docs/detail-design.md)
 
-## MVP Completion Criteria
+## MVP完成条件
 
-The MVP is complete when DevGuard can reliably detect risky logs, environment/secrets additions, and out-of-scope DB/config changes for TypeScript, Python, PHP, Next.js, and FastAPI projects before commit or push.
+TypeScript、Python、PHP、Next.js、FastAPIのプロジェクトで、危険なlog、環境変数 / Secrets追加、スコープ外DB/config変更をcommit前・push前に安定して検出できることをMVP完成条件とします。
