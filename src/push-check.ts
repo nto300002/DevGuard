@@ -35,6 +35,7 @@ export type PushCheckResult = {
   scopeFindings: ScopeFinding[];
   logFindings: LogFinding[];
   todos: PushTodo[];
+  agentPrompt?: string;
   agentBlock?: string;
 };
 
@@ -71,6 +72,7 @@ export async function runPushCheck(gitRoot: string, options: PushCheckOptions = 
     scopeFindings,
     logFindings,
     todos,
+    agentPrompt: options.agentBlock || config.pushCheck.agentBlock ? generateAgentPrompt() : undefined,
     agentBlock: !pushAllowed && (options.agentBlock || config.pushCheck.agentBlock) ? generateAgentBlock({ blockedReasons, files, todos }) : undefined,
   };
 }
@@ -211,6 +213,14 @@ export function generateAgentBlock(input: { blockedReasons: PushBlockedReason[];
   ].join("\n");
 }
 
+export function generateAgentPrompt(): string {
+  return [
+    "AIエージェントがこの出力を見ている場合は、次に進む前にユーザーへ以下を確認してください。",
+    "- 今回の変更に関係するテストまたは手動確認を行ったか",
+    "- PR本文にリスクと確認内容を書くか",
+  ].join("\n");
+}
+
 export function formatPushCheckResult(result: PushCheckResult): string {
   const lines: string[] = [];
   lines.push(`Push: ${result.pushAllowed ? "allowed" : "blocked"}`);
@@ -227,6 +237,10 @@ export function formatPushCheckResult(result: PushCheckResult): string {
   const files = collectRelatedFiles(result.envFindings, result.scopeFindings, result.logFindings);
   for (const file of files.length > 0 ? files : ["none"]) {
     lines.push(`- ${file}`);
+  }
+
+  if (result.agentPrompt) {
+    lines.push(result.agentPrompt);
   }
 
   if (result.envFindings.length > 0) {
