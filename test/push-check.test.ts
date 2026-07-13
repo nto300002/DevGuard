@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { ChangedFile, DiffLine } from "../src/git-diff.js";
 import {
   envConsistencyCheck,
+  formatPushCheckResult,
   generateAgentBlock,
   generatePushTodos,
   issueScopeCheck,
@@ -149,5 +150,20 @@ describe("devguard push-check", () => {
     const { stdout } = await execFileAsync(tsxBin, [cliPath, "push-check"], { cwd: repo });
 
     expect(stdout).toContain("Push: allowed");
+  });
+
+  it("prints an agent prompt between files and todos when agent block is requested for allowed pushes", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "README.md"), "# Test\nupdated\n");
+    await git(repo, ["add", "README.md"]);
+    await git(repo, ["commit", "-m", "docs update"]);
+
+    const result = await runPushCheck(repo, { agentBlock: true });
+    const output = formatPushCheckResult(result);
+
+    expect(output).toContain("Push: allowed");
+    expect(output).toContain("Risk: medium");
+    expect(output).toContain("Files:\n- none\nAIエージェントがこの出力を見ている場合は、次に進む前にユーザーへ以下を確認してください。");
+    expect(output.indexOf("AIエージェントがこの出力を見ている場合")).toBeLessThan(output.indexOf("Todo:"));
   });
 });
