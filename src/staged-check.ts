@@ -589,7 +589,23 @@ function addRecommendation(recommendations: Map<string, TestRecommendation>, id:
 }
 
 function isFrontendPath(filePath: string): boolean {
-  return /^(src\/components|components|src\/app|app\/.*\/page\.|src\/pages|pages)\//.test(filePath) || filePath === "middleware.ts";
+  if (filePath === "middleware.ts") {
+    return true;
+  }
+
+  if (/^(src\/)?(components|pages)\//.test(filePath)) {
+    return true;
+  }
+
+  if (/^src\/(App|main|index)\.[cm]?[jt]sx?$/.test(filePath)) {
+    return true;
+  }
+
+  if (/^(src\/)?app\//.test(filePath)) {
+    return !/(^|\/)api\/|\/route\.[cm]?[jt]sx?$/.test(filePath);
+  }
+
+  return false;
 }
 
 function isBackendPath(filePath: string): boolean {

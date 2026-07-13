@@ -49,6 +49,16 @@ describe("staged check units", () => {
   it("classifies representative files", () => {
     const files: ChangedFile[] = [
       { status: "modified", path: "src/components/Button.tsx" },
+      { status: "modified", path: "components/Header.tsx" },
+      { status: "modified", path: "app/page.tsx" },
+      { status: "modified", path: "app/dashboard/layout.tsx" },
+      { status: "modified", path: "app/(marketing)/page.tsx" },
+      { status: "modified", path: "app/blog/_components/Post.tsx" },
+      { status: "modified", path: "src/app/settings/page.tsx" },
+      { status: "modified", path: "pages/index.tsx" },
+      { status: "modified", path: "src/pages/account.tsx" },
+      { status: "modified", path: "src/App.tsx" },
+      { status: "modified", path: "src/main.tsx" },
       { status: "modified", path: "app/api/users/route.ts" },
       { status: "modified", path: "prisma/schema.prisma" },
       { status: "modified", path: "package.json" },
@@ -56,7 +66,19 @@ describe("staged check units", () => {
     ];
 
     expect(classifyFiles(files)).toEqual({
-      frontend: ["src/components/Button.tsx"],
+      frontend: [
+        "src/components/Button.tsx",
+        "components/Header.tsx",
+        "app/page.tsx",
+        "app/dashboard/layout.tsx",
+        "app/(marketing)/page.tsx",
+        "app/blog/_components/Post.tsx",
+        "src/app/settings/page.tsx",
+        "pages/index.tsx",
+        "src/pages/account.tsx",
+        "src/App.tsx",
+        "src/main.tsx",
+      ],
       backend: ["app/api/users/route.ts"],
       db: ["prisma/schema.prisma"],
       config: ["package.json"],
@@ -81,24 +103,55 @@ describe("staged check units", () => {
 
   it("detects browser storage usage as a keyword risk", () => {
     const findings = detectKeywordFindings([
-      added("src/storage.ts", 1, 'localStorage.setItem("theme", "dark");'),
-      added("src/storage.ts", 2, 'sessionStorage.setItem("panel", "open");'),
+      added("app/page.tsx", 1, 'localStorage.setItem("theme", "dark");'),
+      added("src/components/Panel.tsx", 2, 'sessionStorage.setItem("panel", "open");'),
     ]);
 
     expect(findings).toEqual([
       expect.objectContaining({
         ruleId: "browser-storage-risk",
         severity: "medium",
-        filePath: "src/storage.ts",
+        filePath: "app/page.tsx",
         lineNumber: 1,
       }),
       expect.objectContaining({
         ruleId: "browser-storage-risk",
         severity: "medium",
-        filePath: "src/storage.ts",
+        filePath: "src/components/Panel.tsx",
         lineNumber: 2,
       }),
     ]);
+  });
+
+  it("detects TypeScript and TSX risk keywords in Next.js and React files", () => {
+    const findings = detectKeywordFindings([
+      added("src/app/settings/page.tsx", 1, "return <div dangerouslySetInnerHTML={{ __html: html }} />;"),
+      added("src/components/Button.tsx", 2, "const value = process.env.NEXT_PUBLIC_SECRET;"),
+      added("src/hooks/useStorage.ts", 3, "window.localStorage.getItem(key);"),
+    ]);
+
+    expect(findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: "dangerous-apis",
+          severity: "high",
+          filePath: "src/app/settings/page.tsx",
+          lineNumber: 1,
+        }),
+        expect.objectContaining({
+          ruleId: "secrets-credentials",
+          severity: "high",
+          filePath: "src/components/Button.tsx",
+          lineNumber: 2,
+        }),
+        expect.objectContaining({
+          ruleId: "browser-storage-risk",
+          severity: "medium",
+          filePath: "src/hooks/useStorage.ts",
+          lineNumber: 3,
+        }),
+      ]),
+    );
   });
 
   it("categorizes strict log findings", () => {
