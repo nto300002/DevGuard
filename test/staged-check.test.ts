@@ -77,6 +77,28 @@ describe("staged check units", () => {
     );
   });
 
+  it("detects browser storage usage as a keyword risk", () => {
+    const findings = detectKeywordFindings([
+      added("src/storage.ts", 1, 'localStorage.setItem("theme", "dark");'),
+      added("src/storage.ts", 2, 'sessionStorage.setItem("panel", "open");'),
+    ]);
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "browser-storage-risk",
+        severity: "medium",
+        filePath: "src/storage.ts",
+        lineNumber: 1,
+      }),
+      expect.objectContaining({
+        ruleId: "browser-storage-risk",
+        severity: "medium",
+        filePath: "src/storage.ts",
+        lineNumber: 2,
+      }),
+    ]);
+  });
+
   it("categorizes strict log findings", () => {
     const findings = detectLogFindings([
       added("src/static.ts", 1, 'console.log("loaded");'),

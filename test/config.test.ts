@@ -102,5 +102,12 @@ describe("preset and keyword helpers", () => {
     expect(rules.some((rule) => rule.patterns.includes("API_KEY"))).toBe(true);
     expect(rules.some((rule) => rule.patterns.includes("TODO"))).toBe(true);
     expect(rules.some((rule) => rule.patterns.includes("DROP TABLE"))).toBe(true);
+    expect(rules).toContainEqual(
+      expect.objectContaining({
+        id: "browser-storage-risk",
+        severity: "medium",
+        patterns: expect.arrayContaining(["localStorage", "sessionStorage"]),
+      }),
+    );
   });
 });

@@ -54,6 +54,71 @@ devguard push-check
 devguard install-hooks
 ```
 
+## Local Installation
+
+For local development from this repository:
+
+```bash
+npm install
+npm run build
+npm link
+```
+
+After linking, the `devguard` command is available locally:
+
+```bash
+devguard --help
+devguard doctor
+```
+
+To remove the local link later:
+
+```bash
+npm unlink -g devguard
+```
+
+## Local Usage
+
+Run a staged pre-commit check:
+
+```bash
+git add <files>
+devguard check --staged
+```
+
+Run a branch-level pre-push check:
+
+```bash
+devguard push-check --agent-block
+```
+
+Install Git hooks in the current repository:
+
+```bash
+devguard install-hooks
+```
+
+Installed hooks run:
+
+- `pre-commit`: `npx devguard check --staged`
+- `pre-push`: `npx devguard push-check --agent-block`
+
+For local development without publishing the package, hooks can be tested by overriding the binary:
+
+```bash
+DEVGUARD_BIN="node /absolute/path/to/DevGuard/dist/cli.js" git commit -m "test"
+```
+
+## Current Security Detection
+
+DevGuard detects these security-related patterns in the default keyword database:
+
+- variable debug logs such as `console.log(user)`
+- secret-like names such as `API_KEY`, `TOKEN`, `PASSWORD`, `DATABASE_URL`, and `OPENAI_API_KEY`
+- GitHub Actions secret references such as `${{ secrets.STRIPE_SECRET_KEY }}`
+- dangerous APIs such as `eval(`, `innerHTML`, and `dangerouslySetInnerHTML`
+- browser storage usage through `localStorage` and `sessionStorage` via the `browser-storage-risk` rule
+
 ## Hook Behavior
 
 `pre-commit` runs:
