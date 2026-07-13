@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { runCheckStagedCommand } from "./staged-check.js";
 import { formatHookInstallResult, installHooks } from "./hooks.js";
 import { detectRoot, formatDoctorResult } from "./root.js";
@@ -59,7 +61,15 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   return 1;
 }
 
-const isDirectExecution = import.meta.url === `file://${process.argv[1]}`;
+export function isDirectCliExecution(moduleUrl: string, argvPath: string | undefined): boolean {
+  if (!argvPath) {
+    return false;
+  }
+
+  return realpathSync(fileURLToPath(moduleUrl)) === realpathSync(argvPath);
+}
+
+const isDirectExecution = isDirectCliExecution(import.meta.url, process.argv[1]);
 
 if (isDirectExecution) {
   const exitCode = await main();
