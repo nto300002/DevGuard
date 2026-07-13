@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { loadConfig, mergeDefaultKeywordDatabase, type DevGuardConfig, type KeywordRule } from "./config.js";
-import { getStagedDiff, type ChangedFile, type DiffLine } from "./git-diff.js";
+import { getAllDiff, getStagedDiff, getWorktreeDiff, type ChangedFile, type DiffLine, type GitDiffResult } from "./git-diff.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -103,11 +103,12 @@ export type StagedCheckResult = {
 };
 
 export type RunCheckStagedCommandOptions = {
-  commandName?: "check --staged" | "check --staged-diff";
+  commandName?: "check --staged" | "check --staged-diff" | "check --worktree-diff" | "check --all-diff";
+  diffScope?: "staged" | "worktree" | "all";
 };
 
-export async function runStagedCheck(gitRoot: string): Promise<StagedCheckResult> {
-  const [{ config }, stagedDiff] = await Promise.all([loadConfig(gitRoot), getStagedDiff(gitRoot)]);
+export async function runStagedCheck(gitRoot: string, diffScope: RunCheckStagedCommandOptions["diffScope"] = "staged"): Promise<StagedCheckResult> {
+  const [{ config }, stagedDiff] = await Promise.all([loadConfig(gitRoot), getDiffByScope(gitRoot, diffScope)]);
   const classifiedFiles = classifyFiles(stagedDiff.files);
   const suppressions = parseSuppressionComments(stagedDiff.lines);
   const keywordFindings = applySuppressions(detectKeywordFindings(stagedDiff.lines), suppressions);
@@ -129,9 +130,19 @@ export async function runStagedCheck(gitRoot: string): Promise<StagedCheckResult
 
 export async function runCheckStagedCommand(cwd: string, options: RunCheckStagedCommandOptions = {}): Promise<number> {
   const gitRoot = (await runGit(cwd, ["rev-parse", "--show-toplevel"])).trim();
-  const result = await runStagedCheck(gitRoot);
+  const result = await runStagedCheck(gitRoot, options.diffScope ?? "staged");
   process.stdout.write(formatStagedCheckResult(result, options.commandName));
   return result.risk.exitCode;
+}
+
+function getDiffByScope(gitRoot: string, diffScope: RunCheckStagedCommandOptions["diffScope"]): Promise<GitDiffResult> {
+  if (diffScope === "worktree") {
+    return getWorktreeDiff(gitRoot);
+  }
+  if (diffScope === "all") {
+    return getAllDiff(gitRoot);
+  }
+  return getStagedDiff(gitRoot);
 }
 
 export function classifyFiles(files: ChangedFile[]): ClassifiedFiles {

@@ -22,6 +22,8 @@ describe("devguard CLI", () => {
     expect(stdout).toContain("doctor");
     expect(stdout).toContain("check --staged");
     expect(stdout).toContain("check --staged-diff");
+    expect(stdout).toContain("check --worktree-diff");
+    expect(stdout).toContain("check --all-diff");
     expect(stdout).toContain("push-check");
   });
 

@@ -5,9 +5,11 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
+  getAllDiff,
   getDefaultBranchDiff,
   getStagedDiff,
   getStagedFiles,
+  getWorktreeDiff,
   parseDiffLines,
   parseNameStatus,
 } from "../src/git-diff.js";
@@ -153,5 +155,67 @@ describe("git diff collection", () => {
       lineNumber: 1,
       content: "after();",
     });
+  });
+
+  it("collects unstaged and untracked worktree diff lines", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "tracked.ts"), "before();\n");
+    await git(repo, ["add", "src/tracked.ts"]);
+    await git(repo, ["commit", "-m", "add tracked"]);
+
+    await writeFile(path.join(repo, "src", "tracked.ts"), "before();\nafter();\n");
+    await writeFile(path.join(repo, "src", "untracked.ts"), "console.log(user);\n");
+
+    const worktreeDiff = await getWorktreeDiff(repo);
+
+    expect(worktreeDiff.files).toEqual([
+      { status: "modified", path: "src/tracked.ts" },
+      { status: "added", path: "src/untracked.ts" },
+    ]);
+    expect(worktreeDiff.lines).toEqual(
+      expect.arrayContaining([
+        {
+          type: "added",
+          filePath: "src/tracked.ts",
+          lineNumber: 2,
+          content: "after();",
+        },
+        {
+          type: "added",
+          filePath: "src/untracked.ts",
+          lineNumber: 1,
+          content: "console.log(user);",
+        },
+      ]),
+    );
+  });
+
+  it("collects staged, unstaged, and untracked lines for all diff", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "tracked.ts"), "before();\n");
+    await git(repo, ["add", "src/tracked.ts"]);
+    await git(repo, ["commit", "-m", "add tracked"]);
+
+    await writeFile(path.join(repo, "src", "staged.ts"), "localStorage.getItem(key);\n");
+    await git(repo, ["add", "src/staged.ts"]);
+    await writeFile(path.join(repo, "src", "tracked.ts"), "before();\nafter();\n");
+    await writeFile(path.join(repo, "src", "untracked.ts"), "sessionStorage.getItem(key);\n");
+
+    const allDiff = await getAllDiff(repo);
+
+    expect(allDiff.files).toEqual([
+      { status: "added", path: "src/staged.ts" },
+      { status: "modified", path: "src/tracked.ts" },
+      { status: "added", path: "src/untracked.ts" },
+    ]);
+    expect(allDiff.lines.map((line) => `${line.filePath}:${line.content}`)).toEqual(
+      expect.arrayContaining([
+        "src/staged.ts:localStorage.getItem(key);",
+        "src/tracked.ts:after();",
+        "src/untracked.ts:sessionStorage.getItem(key);",
+      ]),
+    );
   });
 });

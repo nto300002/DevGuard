@@ -223,4 +223,30 @@ describe("devguard check --staged", () => {
     expect(stdout).toContain("Consider splitting this work into smaller PRs.");
     expect(stdout).toContain("11+ files or 301+ changed lines: split into smaller PRs");
   });
+
+  it("supports check --worktree-diff for unstaged and untracked changes", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "worktree.ts"), "console.log(user);\n");
+
+    await expect(execFileAsync(tsxBin, [cliPath, "check", "--worktree-diff"], { cwd: repo })).rejects.toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining("DevGuard check --worktree-diff"),
+    });
+  });
+
+  it("supports check --all-diff for staged and unstaged changes", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "staged.ts"), "localStorage.getItem(key);\n");
+    await git(repo, ["add", "src/staged.ts"]);
+    await writeFile(path.join(repo, "src", "unstaged.ts"), "sessionStorage.getItem(key);\n");
+
+    const { stdout } = await execFileAsync(tsxBin, [cliPath, "check", "--all-diff"], { cwd: repo });
+
+    expect(stdout).toContain("DevGuard check --all-diff");
+    expect(stdout).toContain("src/staged.ts (added)");
+    expect(stdout).toContain("src/unstaged.ts (added)");
+    expect(stdout).toContain("Browser storage usage");
+  });
 });
