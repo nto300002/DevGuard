@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { access, chmod, mkdtemp, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,6 +30,23 @@ async function createRepo(): Promise<string> {
   return repo;
 }
 
+async function createRepoWithSubmodule(): Promise<{ parent: string; submodule: string }> {
+  const parent = await createRepo();
+  const childSource = await createRepo();
+  await git(parent, ["-c", "protocol.file.allow=always", "submodule", "add", childSource, "packages/child"]);
+  await git(parent, ["commit", "-m", "add submodule"]);
+  return {
+    parent,
+    submodule: path.join(parent, "packages", "child"),
+  };
+}
+
+async function hookPath(repo: string, hookName: "pre-commit" | "pre-push"): Promise<string> {
+  const { stdout } = await git(repo, ["rev-parse", "--git-path", "hooks"]);
+  const hooksDir = stdout.trim();
+  return path.join(path.isAbsolute(hooksDir) ? hooksDir : path.join(repo, hooksDir), hookName);
+}
+
 async function exists(filePath: string): Promise<boolean> {
   return access(filePath)
     .then(() => true)
@@ -42,12 +59,14 @@ describe("installHooks", () => {
       formatHookInstallResult({
         installed: ["pre-commit"],
         skipped: [{ hookName: "pre-push", reason: "already-exists" }],
+        repositories: [],
       }),
     ).toContain("インストール済み:");
     expect(
       formatHookInstallResult({
         installed: [],
         skipped: [],
+        repositories: [],
       }),
     ).toContain("変更されたhookはありません。");
   });
@@ -66,6 +85,32 @@ describe("installHooks", () => {
     expect((await stat(prePushPath)).mode & 0o111).toBeGreaterThan(0);
     expect(await readFile(preCommitPath, "utf8")).toContain("check --staged");
     expect(await readFile(prePushPath, "utf8")).toContain("push-check --agent-block");
+  });
+
+  it("installs hooks in a submodule using git hook path resolution", async () => {
+    const { submodule } = await createRepoWithSubmodule();
+
+    const result = await installHooks(submodule);
+
+    const preCommitPath = await hookPath(submodule, "pre-commit");
+    const prePushPath = await hookPath(submodule, "pre-push");
+    expect(result.installed).toEqual(["pre-commit", "pre-push"]);
+    expect(await exists(preCommitPath)).toBe(true);
+    expect(await exists(prePushPath)).toBe(true);
+    expect((await stat(preCommitPath)).mode & 0o111).toBeGreaterThan(0);
+    expect((await stat(prePushPath)).mode & 0o111).toBeGreaterThan(0);
+  });
+
+  it("installs hooks for the root repository and initialized submodules", async () => {
+    const { parent, submodule } = await createRepoWithSubmodule();
+
+    const result = await installHooks(parent, { includeSubmodules: true });
+
+    expect(result.repositories.map((repository) => repository.gitRoot)).toEqual([await realpath(parent), await realpath(submodule)]);
+    expect(await exists(await hookPath(parent, "pre-commit"))).toBe(true);
+    expect(await exists(await hookPath(parent, "pre-push"))).toBe(true);
+    expect(await exists(await hookPath(submodule, "pre-commit"))).toBe(true);
+    expect(await exists(await hookPath(submodule, "pre-push"))).toBe(true);
   });
 
   it("does not overwrite existing hooks", async () => {

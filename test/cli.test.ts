@@ -25,6 +25,7 @@ describe("devguard CLI", () => {
     expect(stdout).toContain("check --worktree-diff");
     expect(stdout).toContain("check --all-diff");
     expect(stdout).toContain("push-check");
+    expect(stdout).toContain("install-hooks [--include-submodules]");
   });
 
   it("detects direct execution through a symlinked bin path", async () => {

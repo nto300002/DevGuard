@@ -17,7 +17,7 @@ const helpText = `DevGuard
   devguard check --worktree-diff
   devguard check --all-diff
   devguard push-check
-  devguard install-hooks
+  devguard install-hooks [--include-submodules]
   devguard --help
 
 AI開発向けのpre-commit / pre-pushセルフレビューCLIです。
@@ -48,7 +48,9 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
 
   if (args[0] === "install-hooks") {
     const root = await detectRoot(process.cwd());
-    const result = await installHooks(root.gitRoot);
+    const result = await installHooks(root.gitRoot, {
+      includeSubmodules: args.includes("--include-submodules"),
+    });
     process.stdout.write(formatHookInstallResult(result));
     return 0;
   }

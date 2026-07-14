@@ -208,6 +208,8 @@ Installs Git hooks for:
 - `pre-push`
 
 Existing hooks must not be overwritten silently.
+Hook directory resolution must use Git's own hook path so submodules and worktrees are supported.
+When `--include-submodules` is provided, DevGuard should install the same hooks into the root repository and initialized recursive submodules.
 
 ### `devguard init`
 

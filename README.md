@@ -55,6 +55,7 @@ devguard check --worktree-diff
 devguard check --all-diff
 devguard push-check
 devguard install-hooks
+devguard install-hooks --include-submodules
 ```
 
 ## インストール
@@ -162,6 +163,14 @@ devguard push-check --agent-block
 ```bash
 devguard install-hooks
 ```
+
+初期化済みサブモジュールにもまとめてGit hookを導入する場合:
+
+```bash
+devguard install-hooks --include-submodules
+```
+
+サブモジュールやGit worktreeでも正しいhook配置先を使うため、DevGuardは `git rev-parse --git-path hooks` でhookディレクトリを解決します。
 
 導入されるhookは以下を実行します。
 

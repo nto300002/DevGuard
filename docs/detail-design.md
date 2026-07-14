@@ -124,6 +124,9 @@ Responsibilities:
 - Install `pre-commit` and `pre-push` hooks.
 - Preserve existing hooks and avoid silent overwrite.
 - Make installed hooks executable.
+- Resolve the hook directory with `git rev-parse --git-path hooks`.
+- Support submodule and worktree hook locations where `.git` may be a file or an indirection.
+- When `--include-submodules` is provided, enumerate initialized recursive submodules and install hooks into each repository.
 - Use `npx @nto300002/devguard check --staged` for `pre-commit`.
 - Use `npx @nto300002/devguard push-check --agent-block` for `pre-push`.
 
