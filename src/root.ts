@@ -34,7 +34,7 @@ export async function runGit(cwd: string, args: string[]): Promise<string> {
     return stdout.trimEnd();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new RootDetectionError(`Git command failed: git ${args.join(" ")}\n${message}`);
+    throw new RootDetectionError(`Gitコマンドに失敗しました: git ${args.join(" ")}\n${message}`);
   }
 }
 
@@ -44,7 +44,7 @@ export async function detectRoot(cwd = process.cwd()): Promise<RootDetectionResu
   const isBareRepository = (await runGit(absoluteCwd, ["rev-parse", "--is-bare-repository"])).trim() === "true";
 
   if (!insideWorkTree || isBareRepository) {
-    throw new RootDetectionError("DevGuard must run inside a non-bare Git work tree.");
+    throw new RootDetectionError("DevGuardはbareではないGit作業ツリー内で実行してください。");
   }
 
   const gitRoot = await realpath(await runGit(absoluteCwd, ["rev-parse", "--show-toplevel"]));
@@ -79,7 +79,7 @@ export function toRootRelativePath(gitRoot: string, targetPath: string): string 
   }
 
   if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    throw new RootDetectionError(`Path is outside Git root: ${targetPath}`);
+    throw new RootDetectionError(`パスがGit rootの外にあります: ${targetPath}`);
   }
 
   return normalizePath(relativePath);
@@ -90,20 +90,20 @@ export function formatDoctorResult(result: RootDetectionResult): string {
     "DevGuard doctor",
     "",
     "Git:",
-    `- inside work tree: ${result.isInsideWorkTree}`,
-    `- bare repository: ${result.isBareRepository}`,
-    `- git root: ${result.gitRoot}`,
-    `- current directory: ${result.cwd}`,
-    `- relative cwd: ${result.relativeCwdFromRoot}`,
+    `- 作業ツリー内: ${result.isInsideWorkTree}`,
+    `- bare repositoryではない: ${!result.isBareRepository}`,
+    `- Git root: ${result.gitRoot}`,
+    `- 現在のディレクトリ: ${result.cwd}`,
+    `- rootからの相対パス: ${result.relativeCwdFromRoot}`,
     "",
-    "Config:",
-    `- config path: ${result.configPath}`,
-    `- config loaded: ${result.configExists}`,
-    `- using default config: ${!result.configExists}`,
+    "設定:",
+    `- 設定ファイル: ${result.configPath}`,
+    `- 設定読み込み済み: ${result.configExists}`,
+    `- デフォルト設定を使用: ${!result.configExists}`,
     "",
-    "Path:",
-    "- root-relative paths enabled: true",
-    "- separator normalized to /: true",
+    "パス:",
+    "- root相対パス: 有効",
+    "- 区切り文字を / に正規化: true",
     "",
   ].join("\n");
 }

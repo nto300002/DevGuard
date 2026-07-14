@@ -149,12 +149,12 @@ Required checks:
 
 PR size guidance:
 
-- 1-5 files / <=150 changed lines: compact PR
-- 6-10 files or 151-300 changed lines: consider splitting
-- 11+ files or 301+ changed lines: split into smaller PRs
+- 1-5ファイル / 変更150行以下: 小さくまとまったPR
+- 6-10ファイル または 変更151-300行: PR分割を検討
+- 11ファイル以上 または 変更301行以上: 小さなPRに分割
 
-If the staged diff reaches 6 files or 151 changed lines, DevGuard should warn the user to consider smaller PRs.
-If the staged diff reaches 11 files or 301 changed lines, DevGuard should strongly recommend splitting the work before review.
+If the staged diff reaches 6 files or 151 changed lines, DevGuard should warn the user in Japanese to consider smaller PRs.
+If the staged diff reaches 11 files or 301 changed lines, DevGuard should strongly recommend splitting the work before review in Japanese.
 
 ### `devguard check --worktree-diff`
 
@@ -208,6 +208,8 @@ Installs Git hooks for:
 - `pre-push`
 
 Existing hooks must not be overwritten silently.
+Hook directory resolution must use Git's own hook path so submodules and worktrees are supported.
+When `--include-submodules` is provided, DevGuard should install the same hooks into the root repository and initialized recursive submodules.
 
 ### `devguard init`
 

@@ -55,6 +55,7 @@ devguard check --worktree-diff
 devguard check --all-diff
 devguard push-check
 devguard install-hooks
+devguard install-hooks --include-submodules
 ```
 
 ## インストール
@@ -147,9 +148,9 @@ devguard check --all-diff
 
 差分サイズの目安:
 
-- 1-5 files / <=150 changed lines: compact PR
-- 6-10 files or 151-300 changed lines: consider splitting
-- 11+ files or 301+ changed lines: split into smaller PRs
+- 1-5ファイル / 変更150行以下: 小さくまとまったPR
+- 6-10ファイル または 変更151-300行: PR分割を検討
+- 11ファイル以上 または 変更301行以上: 小さなPRに分割
 
 branch全体をpush前に確認します。
 
@@ -162,6 +163,14 @@ devguard push-check --agent-block
 ```bash
 devguard install-hooks
 ```
+
+初期化済みサブモジュールにもまとめてGit hookを導入する場合:
+
+```bash
+devguard install-hooks --include-submodules
+```
+
+サブモジュールやGit worktreeでも正しいhook配置先を使うため、DevGuardは `git rev-parse --git-path hooks` でhookディレクトリを解決します。
 
 導入されるhookは以下を実行します。
 

@@ -18,13 +18,14 @@ describe("devguard CLI", () => {
     });
 
     expect(stdout).toContain("DevGuard");
-    expect(stdout).toContain("Usage:");
+    expect(stdout).toContain("使い方:");
     expect(stdout).toContain("doctor");
     expect(stdout).toContain("check --staged");
     expect(stdout).toContain("check --staged-diff");
     expect(stdout).toContain("check --worktree-diff");
     expect(stdout).toContain("check --all-diff");
     expect(stdout).toContain("push-check");
+    expect(stdout).toContain("install-hooks [--include-submodules]");
   });
 
   it("detects direct execution through a symlinked bin path", async () => {

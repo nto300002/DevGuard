@@ -9,7 +9,7 @@ import { runPushCheckCommand } from "./push-check.js";
 
 const helpText = `DevGuard
 
-Usage:
+使い方:
   devguard doctor
   devguard init
   devguard check --staged
@@ -17,10 +17,10 @@ Usage:
   devguard check --worktree-diff
   devguard check --all-diff
   devguard push-check
-  devguard install-hooks
+  devguard install-hooks [--include-submodules]
   devguard --help
 
-Pre-commit and pre-push self-review CLI for AI-assisted development.
+AI開発向けのpre-commit / pre-pushセルフレビューCLIです。
 `;
 
 export function getHelpText(): string {
@@ -48,7 +48,9 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
 
   if (args[0] === "install-hooks") {
     const root = await detectRoot(process.cwd());
-    const result = await installHooks(root.gitRoot);
+    const result = await installHooks(root.gitRoot, {
+      includeSubmodules: args.includes("--include-submodules"),
+    });
     process.stdout.write(formatHookInstallResult(result));
     return 0;
   }
@@ -62,8 +64,8 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     });
   }
 
-  process.stderr.write(`Unknown command: ${args.join(" ")}\n`);
-  process.stderr.write("Run devguard --help for usage.\n");
+  process.stderr.write(`不明なコマンド: ${args.join(" ")}\n`);
+  process.stderr.write("使い方は devguard --help を確認してください。\n");
   return 1;
 }
 

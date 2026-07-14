@@ -206,8 +206,8 @@ describe("staged check units", () => {
     ]);
 
     expect(resolveTestCommands(classified).map((item) => item.command)).toEqual(expect.arrayContaining(["npm run typecheck", "npm test", "pytest"]));
-    expect(generateChecklist(classified).map((item) => item.label)).toContain("Changed screen was opened.");
-    expect(suggestCommitPlan(classified).map((item) => item.title)).toEqual(["Frontend changes", "Backend changes"]);
+    expect(generateChecklist(classified).map((item) => item.label)).toContain("変更した画面を開いた");
+    expect(suggestCommitPlan(classified).map((item) => item.title)).toEqual(["Frontend変更", "Backend変更"]);
   });
 
   it("evaluates staged diff size and recommends smaller PRs with concrete thresholds", () => {
@@ -225,11 +225,11 @@ describe("staged check units", () => {
       removedLineCount: 0,
       changedLineCount: 151,
       level: "medium",
-      warning: "Staged diff is getting large. Consider splitting this work into smaller PRs.",
+      warning: "差分が大きくなっています。小さなPRへの分割を検討してください。",
     });
-    expect(formatDiffSizeWarning(summary)).toContain("1-5 files / <=150 changed lines: compact PR");
-    expect(formatDiffSizeWarning(summary)).toContain("6-10 files or 151-300 changed lines: consider splitting");
-    expect(formatDiffSizeWarning(summary)).toContain("11+ files or 301+ changed lines: split into smaller PRs");
+    expect(formatDiffSizeWarning(summary)).toContain("1-5ファイル / 変更150行以下: 小さくまとまったPR");
+    expect(formatDiffSizeWarning(summary)).toContain("6-10ファイル または 変更151-300行: PR分割を検討");
+    expect(formatDiffSizeWarning(summary)).toContain("11ファイル以上 または 変更301行以上: 小さなPRに分割");
   });
 });
 
@@ -242,7 +242,7 @@ describe("devguard check --staged", () => {
 
     await expect(execFileAsync(tsxBin, [cliPath, "check", "--staged"], { cwd: repo })).rejects.toMatchObject({
       code: 1,
-      stdout: expect.stringContaining("Risk: high"),
+      stdout: expect.stringContaining("リスク: 高"),
     });
   });
 
@@ -254,9 +254,9 @@ describe("devguard check --staged", () => {
 
     const { stdout } = await execFileAsync(tsxBin, [cliPath, "check", "--staged"], { cwd: repo });
 
-    expect(stdout).toContain("Risk: medium");
-    expect(stdout).toContain("Recommended tests:");
-    expect(stdout).toContain("Human checklist:");
+    expect(stdout).toContain("リスク: 中");
+    expect(stdout).toContain("推奨テスト:");
+    expect(stdout).toContain("人間の確認リスト:");
   });
 
   it("supports check --staged-diff and warns when the staged diff is large", async () => {
@@ -270,11 +270,11 @@ describe("devguard check --staged", () => {
     const { stdout } = await execFileAsync(tsxBin, [cliPath, "check", "--staged-diff"], { cwd: repo });
 
     expect(stdout).toContain("DevGuard check --staged-diff");
-    expect(stdout).toContain("Diff size:");
-    expect(stdout).toContain("- files: 6");
-    expect(stdout).toContain("- changed lines: 156");
-    expect(stdout).toContain("Consider splitting this work into smaller PRs.");
-    expect(stdout).toContain("11+ files or 301+ changed lines: split into smaller PRs");
+    expect(stdout).toContain("差分サイズ:");
+    expect(stdout).toContain("- ファイル数: 6");
+    expect(stdout).toContain("- 変更行数: 156");
+    expect(stdout).toContain("小さなPRへの分割を検討してください。");
+    expect(stdout).toContain("11ファイル以上 または 変更301行以上: 小さなPRに分割");
   });
 
   it("supports check --worktree-diff for unstaged and untracked changes", async () => {
@@ -298,8 +298,8 @@ describe("devguard check --staged", () => {
     const { stdout } = await execFileAsync(tsxBin, [cliPath, "check", "--all-diff"], { cwd: repo });
 
     expect(stdout).toContain("DevGuard check --all-diff");
-    expect(stdout).toContain("src/staged.ts (added)");
-    expect(stdout).toContain("src/unstaged.ts (added)");
-    expect(stdout).toContain("Browser storage usage");
+    expect(stdout).toContain("src/staged.ts (追加)");
+    expect(stdout).toContain("src/unstaged.ts (追加)");
+    expect(stdout).toContain("ブラウザストレージ使用");
   });
 });

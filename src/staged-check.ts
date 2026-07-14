@@ -354,32 +354,32 @@ export function resolveTestCommands(classified: ClassifiedFiles, config?: DevGua
 
 export function generateChecklist(classified: ClassifiedFiles): ChecklistItem[] {
   const checklist: ChecklistItem[] = [
-    { id: "common-related-tests", label: "Related tests or manual checks were performed.", category: "common" },
-    { id: "common-happy-path", label: "Happy path was checked.", category: "common" },
-    { id: "common-error-path", label: "Error path was checked.", category: "common" },
-    { id: "common-ai-tests-read", label: "AI-generated tests were read.", category: "common" },
+    { id: "common-related-tests", label: "関連するテストまたは手動確認を実施した", category: "common" },
+    { id: "common-happy-path", label: "正常系を確認した", category: "common" },
+    { id: "common-error-path", label: "異常系を確認した", category: "common" },
+    { id: "common-ai-tests-read", label: "AIが生成したテスト内容を読んだ", category: "common" },
   ];
 
   if (classified.frontend.length > 0) {
     checklist.push(
-      { id: "frontend-screen-opened", label: "Changed screen was opened.", category: "frontend" },
-      { id: "frontend-states", label: "Error, loading, and empty states were checked.", category: "frontend" },
-      { id: "frontend-public-secret", label: "NEXT_PUBLIC_ does not contain secret-like values.", category: "frontend" },
+      { id: "frontend-screen-opened", label: "変更した画面を開いた", category: "frontend" },
+      { id: "frontend-states", label: "エラー・ローディング・空状態を確認した", category: "frontend" },
+      { id: "frontend-public-secret", label: "NEXT_PUBLIC_ にsecretらしい値が含まれていない", category: "frontend" },
     );
   }
 
   if (classified.backend.length > 0 || classified.db.length > 0) {
     checklist.push(
-      { id: "backend-route", label: "API route happy path was checked.", category: "backend" },
-      { id: "backend-validation", label: "Validation error was checked.", category: "backend" },
-      { id: "backend-db", label: "Migration or local DB behavior was checked when DB changes exist.", category: "backend" },
+      { id: "backend-route", label: "API routeの正常系を確認した", category: "backend" },
+      { id: "backend-validation", label: "バリデーションエラーを確認した", category: "backend" },
+      { id: "backend-db", label: "DB変更がある場合はmigrationまたはlocal DB挙動を確認した", category: "backend" },
     );
   }
 
   if (classified.unknown.some((file) => file.endsWith(".php")) || classified.config.some((file) => file === "composer.json" || file === "composer.lock")) {
     checklist.push(
-      { id: "php-debug", label: "var_dump, print_r, dd, and dump are not left behind.", category: "php" },
-      { id: "php-env-example", label: ".env.example was updated for getenv or $_ENV additions.", category: "php" },
+      { id: "php-debug", label: "var_dump, print_r, dd, dump が残っていない", category: "php" },
+      { id: "php-env-example", label: "getenv または $_ENV 追加時に .env.example を更新した", category: "php" },
     );
   }
 
@@ -410,7 +410,7 @@ export function evaluateDiffSize(files: ChangedFile[], lines: DiffLine[]): DiffS
       removedLineCount,
       changedLineCount,
       level: "large",
-      warning: "Staged diff is large. Split this work into smaller PRs before review.",
+      warning: "差分が大きすぎます。レビュー前に小さなPRへ分割してください。",
     };
   }
 
@@ -421,7 +421,7 @@ export function evaluateDiffSize(files: ChangedFile[], lines: DiffLine[]): DiffS
       removedLineCount,
       changedLineCount,
       level: "medium",
-      warning: "Staged diff is getting large. Consider splitting this work into smaller PRs.",
+      warning: "差分が大きくなっています。小さなPRへの分割を検討してください。",
     };
   }
 
@@ -436,18 +436,18 @@ export function evaluateDiffSize(files: ChangedFile[], lines: DiffLine[]): DiffS
 
 export function formatDiffSizeWarning(summary: DiffSizeSummary): string {
   const lines = [
-    `- files: ${summary.fileCount}`,
-    `- changed lines: ${summary.changedLineCount}`,
-    `- added lines: ${summary.addedLineCount}`,
-    `- removed lines: ${summary.removedLineCount}`,
-    "PR size guide:",
-    "- 1-5 files / <=150 changed lines: compact PR",
-    "- 6-10 files or 151-300 changed lines: consider splitting",
-    "- 11+ files or 301+ changed lines: split into smaller PRs",
+    `- ファイル数: ${summary.fileCount}`,
+    `- 変更行数: ${summary.changedLineCount}`,
+    `- 追加行数: ${summary.addedLineCount}`,
+    `- 削除行数: ${summary.removedLineCount}`,
+    "PRサイズ目安:",
+    "- 1-5ファイル / 変更150行以下: 小さくまとまったPR",
+    "- 6-10ファイル または 変更151-300行: PR分割を検討",
+    "- 11ファイル以上 または 変更301行以上: 小さなPRに分割",
   ];
 
   if (summary.warning) {
-    lines.push(`Warning: ${summary.warning}`);
+    lines.push(`警告: ${summary.warning}`);
   }
 
   return lines.join("\n");
@@ -456,13 +456,13 @@ export function formatDiffSizeWarning(summary: DiffSizeSummary): string {
 export function suggestCommitPlan(classified: ClassifiedFiles): CommitPlanItem[] {
   const plan: CommitPlanItem[] = [];
   const groups: Array<[keyof ClassifiedFiles, string]> = [
-    ["frontend", "Frontend changes"],
-    ["backend", "Backend changes"],
-    ["db", "DB changes"],
-    ["config", "Config changes"],
-    ["test", "Test changes"],
-    ["docs", "Docs changes"],
-    ["unknown", "Other changes"],
+    ["frontend", "Frontend変更"],
+    ["backend", "Backend変更"],
+    ["db", "DB変更"],
+    ["config", "設定変更"],
+    ["test", "テスト変更"],
+    ["docs", "ドキュメント変更"],
+    ["unknown", "その他の変更"],
   ];
 
   for (const [key, title] of groups) {
@@ -477,62 +477,121 @@ export function suggestCommitPlan(classified: ClassifiedFiles): CommitPlanItem[]
 export function formatStagedCheckResult(result: StagedCheckResult, commandName = "check --staged"): string {
   const lines: string[] = [];
   lines.push(`DevGuard ${commandName}`);
-  lines.push(`Risk: ${result.risk.level}`);
+  lines.push(`リスク: ${formatSeverity(result.risk.level)}`);
   lines.push("");
-  lines.push("Files:");
+  lines.push("ファイル:");
   if (result.files.length === 0) {
-    lines.push("- none");
+    lines.push("- なし");
   } else {
     for (const file of result.files) {
-      lines.push(`- ${file.path} (${file.status})`);
+      lines.push(`- ${file.path} (${formatFileStatus(file.status)})`);
     }
   }
 
   lines.push("");
-  lines.push("Diff size:");
+  lines.push("差分サイズ:");
   lines.push(formatDiffSizeWarning(result.diffSize));
 
   const findings = [...result.keywordFindings, ...result.logFindings];
   lines.push("");
-  lines.push("Findings:");
+  lines.push("検出結果:");
   if (findings.length === 0) {
-    lines.push("- none");
+    lines.push("- なし");
   } else {
     for (const finding of findings) {
-      const suppressed = finding.suppressed ? " suppressed" : "";
-      const label = finding.type === "keyword" ? finding.label : finding.kind;
-      lines.push(`- [${finding.severity}${suppressed}] ${label}: ${finding.filePath}${finding.lineNumber ? `:${finding.lineNumber}` : ""} ${finding.preview}`);
+      const suppressed = finding.suppressed ? " 抑制済み" : "";
+      const label = finding.type === "keyword" ? formatKeywordLabel(finding.ruleId, finding.label) : formatLogKind(finding.kind);
+      lines.push(`- [${formatSeverity(finding.severity)}${suppressed}] ${label}: ${finding.filePath}${finding.lineNumber ? `:${finding.lineNumber}` : ""} ${finding.preview}`);
     }
   }
 
   const highSuppressions = findings.filter((finding) => finding.severity === "high" && finding.suppressed);
   if (highSuppressions.length > 0) {
     lines.push("");
-    lines.push("High severity suppressions:");
+    lines.push("高リスクの抑制:");
     for (const finding of highSuppressions) {
       lines.push(`- ${finding.filePath}:${finding.lineNumber} ${finding.suppressionReason}`);
     }
   }
 
   lines.push("");
-  lines.push("Recommended tests:");
+  lines.push("推奨テスト:");
   for (const recommendation of result.recommendedTests) {
-    lines.push(`- ${recommendation.command} (${recommendation.reason})`);
+    lines.push(`- ${recommendation.command} (${formatRecommendationReason(recommendation.reason)})`);
   }
 
   lines.push("");
-  lines.push("Human checklist:");
+  lines.push("人間の確認リスト:");
   for (const item of result.checklist) {
     lines.push(`[ ] ${item.label}`);
   }
 
   lines.push("");
-  lines.push("Commit plan:");
+  lines.push("コミット分割案:");
   for (const item of result.commitPlan) {
     lines.push(`- ${item.title}: ${item.files.join(", ")}`);
   }
 
   return `${lines.join("\n")}\n`;
+}
+
+function formatSeverity(severity: "low" | "medium" | "high"): string {
+  return {
+    low: "低",
+    medium: "中",
+    high: "高",
+  }[severity];
+}
+
+function formatFileStatus(status: ChangedFile["status"]): string {
+  return {
+    added: "追加",
+    modified: "変更",
+    deleted: "削除",
+    renamed: "リネーム",
+    copied: "コピー",
+    "type-changed": "種別変更",
+    unmerged: "未マージ",
+    unknown: "不明",
+  }[status];
+}
+
+function formatKeywordLabel(ruleId: string, fallback: string): string {
+  return (
+    {
+      "secrets-credentials": "Secrets / 認証情報",
+      "work-in-progress": "作業途中マーカー",
+      "ai-output-traces": "AI出力またはコピー跡",
+      "bypass-markers": "チェック回避マーカー",
+      "dangerous-apis": "危険API",
+      "browser-storage-risk": "ブラウザストレージ使用",
+      "destructive-db": "破壊的DB変更",
+    }[ruleId] ?? fallback
+  );
+}
+
+function formatLogKind(kind: LogFinding["kind"]): string {
+  return {
+    "static-log": "静的debug log",
+    "variable-log": "変数debug log",
+    "sensitive-log": "機密値debug log",
+    "logger-debug": "logger debug",
+    "print-variable": "変数print",
+    "debugger-left": "debugger残留",
+  }[kind];
+}
+
+function formatRecommendationReason(reason: string): string {
+  return (
+    {
+      "TypeScript or frontend files changed.": "TypeScriptまたはfrontendファイルが変更されています。",
+      "Frontend or shared behavior may be affected.": "Frontendまたは共有動作に影響する可能性があります。",
+      "Backend or DB files changed.": "BackendまたはDBファイルが変更されています。",
+      "Shared behavior may be affected.": "共有動作に影響する可能性があります。",
+      "PHP files or Composer config changed.": "PHPファイルまたはComposer設定が変更されています。",
+      "General staged change check.": "一般的な差分確認です。",
+    }[reason] ?? reason
+  );
 }
 
 function matchesPattern(content: string, pattern: string, rule: KeywordRule): boolean {

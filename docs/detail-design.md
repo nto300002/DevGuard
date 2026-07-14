@@ -77,12 +77,12 @@ Responsibilities:
 - Reuse the staged diff collection and risk checks from `check --staged`.
 - Print edited files.
 - Print file count, added line count, removed line count, and changed line count.
-- Print concrete PR size guidance:
-  - 1-5 files / <=150 changed lines: compact PR.
-  - 6-10 files or 151-300 changed lines: consider splitting.
-  - 11+ files or 301+ changed lines: split into smaller PRs.
-- Warn when the staged diff reaches 6 files or 151 changed lines.
-- Strongly recommend splitting when the staged diff reaches 11 files or 301 changed lines.
+- Print concrete PR size guidance in Japanese:
+  - 1-5ファイル / 変更150行以下: 小さくまとまったPR.
+  - 6-10ファイル または 変更151-300行: PR分割を検討.
+  - 11ファイル以上 または 変更301行以上: 小さなPRに分割.
+- Warn in Japanese when the staged diff reaches 6 files or 151 changed lines.
+- Strongly recommend splitting in Japanese when the staged diff reaches 11 files or 301 changed lines.
 
 ### `devguard check --worktree-diff`
 
@@ -124,6 +124,9 @@ Responsibilities:
 - Install `pre-commit` and `pre-push` hooks.
 - Preserve existing hooks and avoid silent overwrite.
 - Make installed hooks executable.
+- Resolve the hook directory with `git rev-parse --git-path hooks`.
+- Support submodule and worktree hook locations where `.git` may be a file or an indirection.
+- When `--include-submodules` is provided, enumerate initialized recursive submodules and install hooks into each repository.
 - Use `npx @nto300002/devguard check --staged` for `pre-commit`.
 - Use `npx @nto300002/devguard push-check --agent-block` for `pre-push`.
 
@@ -494,18 +497,18 @@ Push blockers:
 Example output:
 
 ```text
-Issue scope warning:
-Current scope: frontend
-Out-of-scope files:
+Issue scope警告:
+現在のscope: frontend
+scope外ファイル:
 - prisma/schema.prisma
-  category: db
+  カテゴリ: DB
 - package.json
-  category: config
-Todo:
-[ ] This DB/config change must be included in this issue.
-[ ] Splitting into another issue or PR has been considered.
-[ ] PR body explains the out-of-scope change.
-[ ] DB/config impact can be explained.
+  カテゴリ: 設定
+確認Todo:
+[ ] scope外DB/config変更をこのPRに含める必要がある
+[ ] 別issueまたは別PRへの分割を検討した
+[ ] PR本文にscope外変更の理由を書く
+[ ] DB/config影響を説明できる
 ```
 
 ## 11. Manual Test Todos
@@ -747,11 +750,11 @@ When push is blocked and agent block output is enabled, DevGuard emits:
 [DEVGUARD_AGENT_CONFIRMATION_REQUIRED]
 operation=git_push
 push_blocked=true
-risk=high
+risk=高
 blocked_reasons:
-- env_secrets_added
-- out_of_scope_db_config
-- variable_logs_remaining
+- 環境変数またはsecretの追加
+- scope外のDB/config変更
+- 変数debug logの残存
 files:
 - .github/workflows/deploy.yml:24
 - src/db/client.ts:8
@@ -765,10 +768,10 @@ required_user_confirmations:
 4. 変数logを削除、または残す理由を書きましたか？
 5. 今回の変更に関係するテストまたは手動確認を行いましたか？
 agent_instruction:
-- Do not run git push again.
-- Do not bypass hooks.
-- Ask the user the required_user_confirmations.
-- If the user confirms, explain the remaining risk before suggesting next action.
+- git push を再実行しないでください。
+- hookを回避しないでください。
+- required_user_confirmations の内容をユーザーに確認してください。
+- ユーザーが確認した場合も、残るリスクを説明してから次の行動を提案してください。
 [/DEVGUARD_AGENT_CONFIRMATION_REQUIRED]
 ```
 
