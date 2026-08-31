@@ -214,6 +214,8 @@ devguard security-check --mode general --json
 
 対象言語に応じて、TypeScript / Python / PHPでは構文木を利用した検査、Dartでは安全な範囲のソース検査、YAML / Dockerfileでは構造検査を行います。High検出がある場合は終了コード1になります。
 
+依存関係・仮想環境・キャッシュ・生成物は標準で検査対象から除外します。例: `node_modules`、`vendor`、`.venv`、`venv`、`env`、`.dart_tool`、`build`、`dist`、`.next`、`coverage`。
+
 CIで集計する場合はJSON形式を利用できます。検出内容、解析不能ファイル、severity別・ruleId別の集計を出力します。
 
 ```bash

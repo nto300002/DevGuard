@@ -145,6 +145,8 @@ Initial general rules:
 
 The implementation uses syntax-aware parsing already available for TypeScript, Python, and PHP, with conservative source-line checks for Dart. Safe patterns such as parameterized SQL and fixed command execution are covered by non-detection tests.
 
+Repository traversal skips dependency, virtual-environment, cache, IDE, and generated directories by default. The language-specific defaults include `node_modules` / `dist` / `.next`, `.venv` / `venv` / `env` / `__pycache__`, `vendor`, and `.dart_tool` / `.pub-cache`.
+
 ## 3. Internal Types
 
 ### Root Detection

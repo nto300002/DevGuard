@@ -101,6 +101,21 @@ describe("security flow scan", () => {
     expect(findings[0].filePath).toBe("src/auth.ts");
   });
 
+  it("excludes language-specific virtual environments, dependencies, and generated directories", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "devguard-security-generated-"));
+    await mkdir(path.join(root, "src"), { recursive: true });
+    for (const directory of [".venv", "venv", "env", "node_modules", "vendor", ".dart_tool", "build"]) {
+      await mkdir(path.join(root, directory), { recursive: true });
+      await writeFile(path.join(root, directory, "ignored.ts"), "const key = process.env.API_KEY;\nlogger.error(key);\n");
+    }
+    await writeFile(path.join(root, "src", "auth.ts"), "const key = process.env.API_KEY;\nlogger.error(key);\n");
+
+    const findings = await scanRepository(root);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].filePath).toBe("src/auth.ts");
+  });
+
   it("detects GitHub Actions secrets flowing into deployment environment values", () => {
     const findings = scanText(
       ".github/workflows/deploy.yml",

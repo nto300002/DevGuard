@@ -75,7 +75,19 @@ export function applySecurityBaseline(findings: SecurityFinding[], baselineIds: 
   return findings.map((finding) => baselineIds.has(finding.id) ? { ...finding, suppressed: true, suppressionReason: "baseline", baseline: true } : finding);
 }
 
-const IGNORED_DIRECTORIES = new Set([".git", "node_modules", "dist", "build", ".next", "coverage", ".dart_tool", "__pycache__", "vendor"]);
+// Dependency, virtual-environment, cache, and build directories are not application source.
+// Keep this list conservative and name-based so generated files cannot inflate scan results.
+const IGNORED_DIRECTORIES = new Set([
+  ".git", ".idea", ".vscode",
+  // TypeScript / JavaScript
+  "node_modules", "bower_components", "dist", "build", ".next", "coverage",
+  // Python
+  ".venv", "venv", "env", "ENV", ".tox", ".nox", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+  // PHP
+  "vendor", ".phpunit.cache",
+  // Dart / Flutter
+  ".dart_tool", ".pub-cache", "Pods",
+]);
 const SOURCE_PATTERNS: Array<{ source: SecuritySource; pattern: RegExp }> = [
   { source: "environment", pattern: /process\.env\b|import\.meta\.env\b|os\.(?:environ|getenv)\b|getenv\s*\(|\$_ENV\b|Platform\.environment\b/ },
   { source: "request", pattern: /request\.(?:json|body|query_params|args|form|headers|cookies)\s*\(|\$_(?:GET|POST|REQUEST|COOKIE)\b|req\.(?:query|body|headers|cookies)\b/ },
