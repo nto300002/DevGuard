@@ -22,6 +22,7 @@ const helpText = `DevGuard
   devguard check --all-diff
   devguard security-check
   devguard security-check --json
+  devguard security-check --sarif
   devguard security-check --mode general
   devguard security-check --write-baseline
   devguard push-check
@@ -85,7 +86,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     }
     const baseline = await loadSecurityBaseline(root.gitRoot, config.securityCheck.baselinePath);
     const findings = filterSecurityFindingsByMode(applySecurityBaseline(applySecurityAllowlist(scan.findings, config.securityCheck.allowlist), baseline), mode);
-    process.stdout.write(args.includes("--json") ? formatSecurityCheckJson(findings, scan.analysisIssues) : formatSecurityCheckResult(findings, scan.analysisIssues));
+    process.stdout.write(args.includes("--sarif") ? formatSecurityCheckSarif(findings, scan.analysisIssues) : args.includes("--json") ? formatSecurityCheckJson(findings, scan.analysisIssues) : formatSecurityCheckResult(findings, scan.analysisIssues));
     const hasHighRisk = findings.some((finding) => finding.severity === "high" && !finding.suppressed);
     return hasHighRisk || (config.securityCheck.failOnUnparseable && scan.analysisIssues.length > 0) ? 1 : 0;
   }
@@ -158,6 +159,58 @@ export function formatSecurityCheckJson(findings: SecurityFinding[], analysisIss
       byRule,
     },
   }, null, 2)}\n`;
+}
+
+export function formatSecurityCheckSarif(findings: SecurityFinding[], analysisIssues: SecurityAnalysisIssue[] = []): string {
+  const rules = [...new Map(findings.map((finding) => [finding.ruleId, {
+    id: finding.ruleId,
+    name: finding.ruleId,
+    shortDescription: { text: finding.message },
+    helpUri: finding.cwe ? `https://cwe.mitre.org/data/definitions/${finding.cwe.replace("CWE-", "")}.html` : undefined,
+  }])).values()];
+  const results = findings.map((finding) => ({
+    ruleId: finding.ruleId,
+    level: sarifLevel(finding.severity),
+    message: { text: finding.message },
+    locations: [{
+      physicalLocation: {
+        artifactLocation: { uri: finding.filePath, uriBaseId: "%SRCROOT%" },
+        region: { startLine: finding.lineNumber, startColumn: 1 },
+      },
+    }],
+    properties: {
+      category: finding.category,
+      confidence: finding.confidence,
+      severity: finding.severity,
+      source: finding.source,
+      sink: finding.sink,
+      flow: finding.flow,
+      remediation: finding.remediation,
+      ...(finding.cwe ? { cwe: finding.cwe } : {}),
+      ...(finding.owaspCategory ? { owaspCategory: finding.owaspCategory } : {}),
+      ...(finding.suppressed ? { suppressed: true } : {}),
+    },
+  }));
+  const notifications = analysisIssues.map((issue) => ({
+    level: "error",
+    message: { text: issue.message },
+    locations: [{ physicalLocation: { artifactLocation: { uri: issue.filePath, uriBaseId: "%SRCROOT%" } } }],
+    properties: { language: issue.language, kind: issue.kind },
+  }));
+  return `${JSON.stringify({
+    version: "2.1.0",
+    $schema: "https://json.schemastore.org/sarif-2.1.0.json",
+    runs: [{
+      tool: { driver: { name: "DevGuard", informationUri: "https://github.com/nto300002/DevGuard", rules } },
+      results,
+      invocations: [{ executionSuccessful: analysisIssues.length === 0, toolExecutionNotifications: notifications }],
+      columnKind: "utf16CodeUnits",
+    }],
+  }, null, 2)}\n`;
+}
+
+function sarifLevel(severity: SecurityFinding["severity"]): "error" | "warning" | "note" {
+  return severity === "high" ? "error" : severity === "medium" ? "warning" : "note";
 }
 
 function formatSecuritySeverity(severity: SecurityFinding["severity"]): string {

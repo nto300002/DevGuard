@@ -80,6 +80,7 @@ The initial target user is the project owner.
 19. Security allowlist and baseline support with expiration/traceability
 20. Separate `Security Flow` and `General Vulnerability` detection modes
 21. Exclude dependency, virtual-environment, cache, and generated directories from repository scans
+22. SARIF 2.1.0 output for GitHub Code Scanning
 
 ### Excluded
 
@@ -461,6 +462,8 @@ devguard security-check --mode general --json
 ```
 
 `security-flow` reports sensitive data source-to-sink flows. `general` reports vulnerability candidates such as SQL Injection, XSS, Command Injection, unsafe deserialization, SSRF, and Path Traversal. General findings are candidates, not confirmed vulnerabilities, and include category, CWE, OWASP category, confidence, remediation, file path, and line number.
+
+`devguard security-check --sarif` must output SARIF 2.1.0 containing tool metadata, unique rules, findings, locations, severity, category, confidence, CWE/OWASP metadata, remediation, and parse-error notifications. Secret values must never be included. The generated file must be uploadable by GitHub Code Scanning.
 
 Repository scans must skip standard non-source directories, including TypeScript/JavaScript dependencies and build output (`node_modules`, `dist`, `build`, `.next`, `coverage`), Python virtual environments and caches (`.venv`, `venv`, `env`, `__pycache__`, `.pytest_cache`), PHP dependencies (`vendor`), and Dart/Flutter tooling output (`.dart_tool`, `.pub-cache`).
 

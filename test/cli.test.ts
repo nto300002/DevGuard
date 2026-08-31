@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { formatSecurityCheckJson, formatSecurityCheckResult, isDirectCliExecution } from "../src/cli.js";
+import { formatSecurityCheckJson, formatSecurityCheckResult, formatSecurityCheckSarif, isDirectCliExecution } from "../src/cli.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -56,5 +56,35 @@ describe("devguard CLI", () => {
     const json = JSON.parse(formatSecurityCheckJson([...findings]));
     expect(json.summary).toMatchObject({ total: 1, active: 1, high: 1, byRule: { "secret-to-log": 1 } });
     expect(json.findings[0]).not.toHaveProperty("preview");
+  });
+
+  it("formats Security Flow and General Vulnerability findings as SARIF", () => {
+    const findings = [
+      {
+        id: "flow-1", ruleId: "secret-to-log", language: "typescript", severity: "high", confidence: "high",
+        filePath: "src/auth.ts", lineNumber: 12, source: "environment", sink: "logger", flow: "environment -> logger",
+        message: "環境変数がログへ流入する可能性があります。", remediation: "固定メッセージへ置き換えてください。", category: "security-flow",
+      },
+      {
+        id: "general-1", ruleId: "general-sqli", language: "python", severity: "high", confidence: "medium",
+        filePath: "app/users.py", lineNumber: 21, source: "user-input", sink: "sql", flow: "external input -> sql",
+        message: "動的なSQL文字列を実行している可能性があります。", remediation: "parameterized queryを使用してください。", category: "general-vulnerability",
+        cwe: "CWE-89", owaspCategory: "A03:2021-Injection",
+      },
+    ] as const;
+    const sarif = JSON.parse(formatSecurityCheckSarif([...findings], [{ filePath: "src/broken.ts", language: "typescript", kind: "parse-error", message: "構文を解析できません。" }]));
+
+    expect(sarif.version).toBe("2.1.0");
+    expect(sarif.$schema).toContain("sarif-2.1.0");
+    expect(sarif.runs).toHaveLength(1);
+    expect(sarif.runs[0].tool.driver.name).toBe("DevGuard");
+    expect(sarif.runs[0].results).toEqual(expect.arrayContaining([
+      expect.objectContaining({ ruleId: "secret-to-log", level: "error", properties: expect.objectContaining({ category: "security-flow", confidence: "high" }) }),
+      expect.objectContaining({ ruleId: "general-sqli", properties: expect.objectContaining({ category: "general-vulnerability", cwe: "CWE-89", owaspCategory: "A03:2021-Injection" }) }),
+    ]));
+    expect(sarif.runs[0].invocations[0].toolExecutionNotifications).toEqual([
+      expect.objectContaining({ level: "error", message: { text: "構文を解析できません。" } }),
+    ]);
+    expect(formatSecurityCheckSarif([...findings], [])).not.toContain("real-secret-value");
   });
 });

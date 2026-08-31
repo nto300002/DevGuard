@@ -134,6 +134,8 @@ Responsibilities:
 
 `security-check` scans the repository and supports `--mode all`, `--mode security-flow`, and `--mode general`. The default is `all` for backward compatibility. General vulnerability rules produce candidate findings with `category`, `cwe`, `owaspCategory`, `confidence`, and remediation information; they do not claim that a vulnerability is confirmed.
 
+`--sarif` serializes the filtered findings into SARIF 2.1.0. Each result contains a relative artifact URI, one-based line location, rule ID, SARIF level, and properties for category, confidence, severity, source/sink, flow, remediation, and optional CWE/OWASP metadata. Parser failures are emitted as `toolExecutionNotifications` and set `executionSuccessful` to false.
+
 Initial general rules:
 
 - `general-sqli` (CWE-89)

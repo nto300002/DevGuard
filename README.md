@@ -56,6 +56,7 @@ devguard check --worktree-diff
 devguard check --all-diff
 devguard security-check
 devguard security-check --json
+devguard security-check --sarif
 devguard security-check --mode general
 devguard security-check --write-baseline
 devguard push-check
@@ -221,6 +222,14 @@ CIで集計する場合はJSON形式を利用できます。検出内容、解�
 ```bash
 devguard security-check --json > devguard-security.json
 ```
+
+GitHub Code Scanningへ取り込む場合はSARIF形式を利用します。Security FlowとGeneral VulnerabilityはFindingの`category`として区別され、GitHub上でファイル・行番号・severityを確認できます。
+
+```bash
+devguard security-check --sarif > devguard.sarif
+```
+
+GitHub Actionsでは、ビルド後にSARIFを生成して`github/codeql-action/upload-sarif`でアップロードします。検出結果のアップロードと、High検出によるマージ停止は別のステップとして設定してください。
 
 既存検出をベースラインへ登録する場合は、設定した`baselinePath`へ書き出します。未設定の場合は`.devguard-security-baseline.json`が使用されます。
 
