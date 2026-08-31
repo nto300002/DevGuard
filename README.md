@@ -284,6 +284,46 @@ npx --yes --package=@nto300002/devguard devguard push-check --agent-block
 
 High riskのcommit findingがある場合はcommitを停止します。High riskのpush findingがある場合はpushを停止します。Security FlowのHigh検出も同様に停止対象です。
 
+## Human-on-the-Loop開発フロー
+
+DevGuardはAIエージェントや自動化された開発フローを置き換えるのではなく、人間が判断すべき高リスク変更だけを止める安全弁として利用します。通常の実装・テスト・低リスク変更は自動で進め、新規High検出、認証・認可、Secrets、公開API、DB、デプロイ設定の変更で人間の確認を要求します。
+
+推奨フロー:
+
+1. AIエージェントがIssueを分析し、実装とテストを作成する
+2. `pre-commit`で変更行を検査する
+3. `pre-push`でブランチ差分と新規Findingを検査する
+4. CIでDevGuard、依存関係、Secret、CodeQL、テストを実行する
+5. Lowは自動通過、Mediumは警告、Highは人間の確認または修正完了まで停止する
+6. 承認された例外は理由・owner・期限・Issueを付けてallowlistまたはbaselineへ記録する
+7. StagingでAPI/E2E/DASTを実行し、結果を確認してから本番へ進める
+
+自動化の判断基準:
+
+| 状態 | 自動処理 | 人間の関与 |
+| --- | --- | --- |
+| Low / confidence high | commit・pushを許可 | 原則不要 |
+| Medium | 警告して継続 | Pull Requestで確認 |
+| 新規High / confidence high | commit・push・mergeを停止 | 必須 |
+| High / confidence medium | 修正案とテスト案を生成 | 修正内容を承認 |
+| 解析不能 | 設定に応じて警告または停止 | 対象コードを確認 |
+
+人間の確認対象は、認証・認可、個人情報・決済、外部公開API、DB migration、ファイルアップロード、Secret・権限設定、本番デプロイ、自動修正の適用です。検出結果は脆弱性の確定ではなく候補として扱い、最終判断はコードレビューと実行時テストで行います。
+
+### セキュリティ拡張ロードマップ
+
+Issueは、検出・CI連携・依存関係・人間承認を独立して実装できる単位に分けます。
+
+- SARIF出力とGitHub Code Scanning連携
+- npm / pip / Composer / pub依存関係の脆弱性検査
+- Secret形式・高エントロピー値・Git履歴の検査
+- Finding fingerprintとbaselineのライフサイクル管理
+- リスクベースのHuman GateとPull Requestコメント
+- 自動修正候補と修正後再スキャン
+- StagingのAPI/E2E/DAST結果との統合
+
+基準として、Webアプリケーションの検証項目は [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/) を参照し、開発プロセス全体の予防・検出・修正・再発防止は [NIST SSDF](https://csrc.nist.gov/projects/ssdf) に沿って段階的に整備します。
+
 ## ドキュメント
 
 - [要件定義](docs/requirements.md)
