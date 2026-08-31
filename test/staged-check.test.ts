@@ -17,6 +17,7 @@ import {
   generateChecklist,
   parseSuppressionComments,
   resolveTestCommands,
+  runStagedCheck,
   suggestCommitPlan,
 } from "../src/staged-check.js";
 
@@ -177,6 +178,55 @@ describe("staged check units", () => {
     expect(formatDiffSizeWarning(summary)).toContain("1-5ファイル / 変更150行以下: 小さくまとまったPR");
     expect(formatDiffSizeWarning(summary)).toContain("6-10ファイル または 変更151-300行: PR分割を検討");
     expect(formatDiffSizeWarning(summary)).toContain("11ファイル以上 または 変更301行以上: 小さなPRに分割");
+  });
+
+  it("runs Security Flow checks on added staged lines", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "auth.ts"), "const key = process.env.RUNTIME_VALUE;\nlogger.error(key);\n");
+    await git(repo, ["add", "src/auth.ts"]);
+
+    const result = await runStagedCheck(repo);
+
+    expect(result.securityFindings).toEqual([
+      expect.objectContaining({ ruleId: "secret-to-log", filePath: "src/auth.ts", severity: "high" }),
+    ]);
+    expect(result.risk.level).toBe("high");
+    expect(result.risk.exitCode).toBe(1);
+  });
+
+  it("uses unchanged source lines when checking an added sink", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "auth.ts"), "const key = process.env.API_KEY;\n");
+    await git(repo, ["add", "src/auth.ts"]);
+    await git(repo, ["commit", "-m", "add auth source"]);
+    await writeFile(path.join(repo, "src", "auth.ts"), "const key = process.env.API_KEY;\nlogger.error(key);\n");
+    await git(repo, ["add", "src/auth.ts"]);
+
+    const result = await runStagedCheck(repo);
+
+    expect(result.securityFindings).toEqual([
+      expect.objectContaining({ ruleId: "secret-to-log", filePath: "src/auth.ts", lineNumber: 2 }),
+    ]);
+  });
+
+  it("does not block a baseline finding", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, ".devguard.yml"), "securityCheck:\n  baselinePath: .devguard-security-baseline.json\n");
+    await writeFile(path.join(repo, ".devguard-security-baseline.json"), JSON.stringify({ findingIds: ["secret-to-log:src/auth.ts:2"] }));
+    await git(repo, ["add", ".devguard.yml", ".devguard-security-baseline.json"]);
+    await git(repo, ["commit", "-m", "configure security baseline"]);
+    await writeFile(path.join(repo, "src", "auth.ts"), "const key = process.env.RUNTIME_VALUE;\nlogger.error(key);\n");
+    await git(repo, ["add", "src/auth.ts"]);
+
+    const result = await runStagedCheck(repo);
+
+    expect(result.securityFindings).toEqual([
+      expect.objectContaining({ ruleId: "secret-to-log", baseline: true, suppressed: true }),
+    ]);
+    expect(result.risk.exitCode).toBe(0);
   });
 });
 

@@ -19,6 +19,7 @@ MVPでは以下に注力します。
 - `.devguard.yml` の読み込みとdefault config
 - `devguard doctor`
 - `devguard check --staged`
+- `devguard security-check`
 - `devguard push-check`
 - `defaultBranch...HEAD` 差分解析
 - keyword rule
@@ -30,7 +31,7 @@ MVPでは以下に注力します。
 - AIエージェント向け確認ブロック
 - `pre-commit` / `pre-push` hook導入
 
-MVPでは、GitHub OAuth、GitHub Secretsの実在確認、GitHub Issue本文の取得、Web UI、VS Code拡張、AST解析、自動修正、AI生成コードの正しさ判定は扱いません。
+MVPでは、GitHub OAuth、GitHub Secretsの実在確認、GitHub Issue本文の取得、Web UI、VS Code拡張、自動修正、AI生成コードの正しさ判定は扱いません。
 
 ## 対象技術
 
@@ -53,6 +54,10 @@ devguard check --staged
 devguard check --staged-diff
 devguard check --worktree-diff
 devguard check --all-diff
+devguard security-check
+devguard security-check --json
+devguard security-check --mode general
+devguard security-check --write-baseline
 devguard push-check
 devguard install-hooks
 devguard install-hooks --include-submodules
@@ -76,11 +81,13 @@ devguard doctor
 一度だけ実行する場合:
 
 ```bash
-npx @nto300002/devguard doctor
-npx @nto300002/devguard check --staged
-npx @nto300002/devguard check --staged-diff
-npx @nto300002/devguard check --worktree-diff
-npx @nto300002/devguard check --all-diff
+npx --yes --package=@nto300002/devguard devguard doctor
+npx --yes --package=@nto300002/devguard devguard check --staged
+npx --yes --package=@nto300002/devguard devguard check --staged-diff
+npx --yes --package=@nto300002/devguard devguard check --worktree-diff
+npx --yes --package=@nto300002/devguard devguard check --all-diff
+npx --yes --package=@nto300002/devguard devguard security-check
+npx --yes --package=@nto300002/devguard devguard security-check --mode general
 ```
 
 GitHub Releaseからtarballをダウンロードして導入する場合:
@@ -174,8 +181,8 @@ devguard install-hooks --include-submodules
 
 導入されるhookは以下を実行します。
 
-- `pre-commit`: `npx @nto300002/devguard check --staged`
-- `pre-push`: `npx @nto300002/devguard push-check --agent-block`
+- `pre-commit`: `npx --yes --package=@nto300002/devguard devguard check --staged`
+- `pre-push`: `npx --yes --package=@nto300002/devguard devguard push-check --agent-block`
 
 packageを公開せずにローカル開発版でhookを試す場合は、`DEVGUARD_BIN` で実行コマンドを差し替えられます。
 
@@ -184,6 +191,72 @@ DEVGUARD_BIN="node /absolute/path/to/DevGuard/dist/cli.js" git commit -m "test"
 ```
 
 ## 現在のセキュリティ検出
+
+リポジトリ全体を確認する場合は、以下を実行します。
+
+```bash
+devguard security-check
+```
+
+検出モードは次の2種類です。
+
+- `security-flow`: Secret、リクエスト入力、例外情報などがログ・URL・レスポンス・ストレージ・デプロイ設定へ流れる経路を検出します。
+- `general-vulnerability`: SQL Injection、XSS、Command Injection、Unsafe Deserialization、SSRF、Path Traversalの脆弱性候補を検出します。
+
+一般脆弱性候補だけを確認する場合は、以下を実行します。検出は脆弱性の確定ではなく、ファイル・行番号・CWE・OWASP分類・confidence・対応方法を含む候補報告です。
+
+```bash
+devguard security-check --mode general
+devguard security-check --mode general --json
+```
+
+一般脆弱性の代表ルールは、TypeScript / Python / PHP / Dartの入力と危険APIの組み合わせを対象にします。parameterized query、固定コマンドなど安全な実装は検出対象から除外しますが、最終的なレビューとテストは必要です。
+
+対象言語に応じて、TypeScript / Python / PHPでは構文木を利用した検査、Dartでは安全な範囲のソース検査、YAML / Dockerfileでは構造検査を行います。High検出がある場合は終了コード1になります。
+
+CIで集計する場合はJSON形式を利用できます。検出内容、解析不能ファイル、severity別・ruleId別の集計を出力します。
+
+```bash
+devguard security-check --json > devguard-security.json
+```
+
+既存検出をベースラインへ登録する場合は、設定した`baselinePath`へ書き出します。未設定の場合は`.devguard-security-baseline.json`が使用されます。
+
+```bash
+devguard security-check --write-baseline
+git add .devguard.yml .devguard-security-baseline.json
+```
+
+既存コードを段階導入する場合は、リポジトリ直下の `.devguard.yml` で対象外パスと期限付き例外を明示します。
+
+```yaml
+securityCheck:
+  enabled: true
+  failOnUnparseable: false
+  baselinePath: .devguard-security-baseline.json
+  excludePaths:
+    - tests/**
+    - e2e/**
+  allowlist:
+    - ruleId: secret-to-log
+      filePath: legacy/**
+      reason: "既存連携の移行完了まで監視のみ"
+      owner: security-team
+      expires: "2026-12-31"
+      issue: "#123"
+```
+
+allowlistには理由・所有者・期限・追跡Issueを必須とし、期限切れの例外は自動的に抑制解除されます。検査結果にはSecretの実値を出力しません。
+
+既存検出をベースラインとして扱う場合は、`baselinePath` に次の形式のJSONを指定します。ベースラインに記録された検出は表示されますが、新規検出としてはブロックされません。
+
+```json
+{
+  "findingIds": [
+    "secret-to-log:legacy/auth.py:42"
+  ]
+}
+```
 
 DevGuardはdefault keyword databaseで以下のセキュリティ関連パターンを検出します。
 
@@ -198,16 +271,16 @@ DevGuardはdefault keyword databaseで以下のセキュリティ関連パター
 `pre-commit` では以下を実行します。
 
 ```bash
-npx @nto300002/devguard check --staged
+npx --yes --package=@nto300002/devguard devguard check --staged
 ```
 
 `pre-push` では以下を実行します。
 
 ```bash
-npx @nto300002/devguard push-check --agent-block
+npx --yes --package=@nto300002/devguard devguard push-check --agent-block
 ```
 
-High riskのcommit findingがある場合はcommitを停止します。High riskのpush findingがある場合はpushを停止します。
+High riskのcommit findingがある場合はcommitを停止します。High riskのpush findingがある場合はpushを停止します。Security FlowのHigh検出も同様に停止対象です。
 
 ## ドキュメント
 

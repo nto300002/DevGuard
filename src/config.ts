@@ -37,7 +37,23 @@ export type DevGuardConfig = {
     defaultMode: "warn" | "error";
     allowedScopes: Record<string, { paths: string[] }>;
   };
+  securityCheck: {
+    enabled: boolean;
+    failOnUnparseable: boolean;
+    baselinePath: string | null;
+    excludePaths: string[];
+    allowlist: SecurityAllowlistEntry[];
+  };
   testCommands: Record<string, { command: string }>;
+};
+
+export type SecurityAllowlistEntry = {
+  ruleId: string;
+  filePath: string;
+  reason: string;
+  owner: string;
+  expires: string;
+  issue: string;
 };
 
 export type LoadedConfig = {
@@ -134,6 +150,13 @@ export const DEFAULT_CONFIG: DevGuardConfig = {
         ],
       },
     },
+  },
+  securityCheck: {
+    enabled: true,
+    failOnUnparseable: false,
+    baselinePath: null,
+    excludePaths: [],
+    allowlist: [],
   },
   testCommands: {
     typecheck: { command: "npm run typecheck" },
@@ -396,6 +419,19 @@ function mergeConfig(base: DevGuardConfig, raw: RawConfig): DevGuardConfig {
     };
   }
 
+  if (isPlainObject(raw.securityCheck)) {
+    if (raw.securityCheck.baselinePath !== undefined && raw.securityCheck.baselinePath !== null && typeof raw.securityCheck.baselinePath !== "string") {
+      throw new ConfigError("securityCheck.baselinePath は文字列またはnullである必要があります");
+    }
+    base.securityCheck = {
+      ...base.securityCheck,
+      ...pickBooleanFields(raw.securityCheck, ["enabled", "failOnUnparseable"]),
+      ...(raw.securityCheck.baselinePath === null || typeof raw.securityCheck.baselinePath === "string" ? { baselinePath: raw.securityCheck.baselinePath as string | null } : {}),
+      excludePaths: parseStringArray(raw.securityCheck.excludePaths, "securityCheck.excludePaths"),
+      allowlist: parseSecurityAllowlist(raw.securityCheck.allowlist),
+    };
+  }
+
   if (isPlainObject(raw.testCommands)) {
     base.testCommands = parseTestCommands(raw.testCommands, base.testCommands);
   }
@@ -468,6 +504,47 @@ function parseTestCommands(raw: RawConfig, fallback: Record<string, { command: s
     testCommands[key] = { command: value.command };
   }
   return testCommands;
+}
+
+function parseSecurityAllowlist(raw: unknown): SecurityAllowlistEntry[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new ConfigError("securityCheck.allowlist は配列である必要があります");
+  }
+
+  return raw.map((entry, index) => {
+    if (!isPlainObject(entry)) {
+      throw new ConfigError(`securityCheck.allowlist[${index}] はmapping objectである必要があります`);
+    }
+
+    const fields = ["ruleId", "filePath", "reason", "owner", "expires", "issue"] as const;
+    for (const field of fields) {
+      if (typeof entry[field] !== "string" || entry[field].trim() === "") {
+        throw new ConfigError(`securityCheck.allowlist[${index}].${field} は必須の文字列です`);
+      }
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.expires as string) || Number.isNaN(Date.parse(`${entry.expires}T00:00:00Z`))) {
+      throw new ConfigError(`securityCheck.allowlist[${index}].expires はYYYY-MM-DD形式である必要があります`);
+    }
+
+    return {
+      ruleId: entry.ruleId as string,
+      filePath: entry.filePath as string,
+      reason: entry.reason as string,
+      owner: entry.owner as string,
+      expires: entry.expires as string,
+      issue: entry.issue as string,
+    };
+  });
+}
+
+function parseStringArray(raw: unknown, label: string): string[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.some((item) => typeof item !== "string" || item.trim() === "")) {
+    throw new ConfigError(`${label} には空でない文字列だけを指定してください`);
+  }
+  return raw as string[];
 }
 
 function pickStringFields<T extends string>(raw: RawConfig, keys: readonly T[]): Partial<Record<T, string>> {

@@ -85,6 +85,46 @@ describe("validateConfig", () => {
 
     expect(config.presets.enabled).toEqual(["typescript", "nextjs", "python", "fastapi", "php"]);
   });
+
+  it("requires security allowlist metadata", () => {
+    expect(() =>
+      validateConfig({
+        securityCheck: {
+          allowlist: [{ ruleId: "secret-to-log", filePath: "lib/auth.ts" }],
+        },
+      }),
+    ).toThrow(ConfigError);
+  });
+
+  it("loads a security allowlist entry", () => {
+    const config = validateConfig({
+      securityCheck: {
+        allowlist: [{ ruleId: "secret-to-log", filePath: "lib/auth.ts", reason: "legacy integration", owner: "security-team", expires: "2099-12-31", issue: "#24" }],
+      },
+    });
+
+    expect(config.securityCheck.allowlist[0]).toMatchObject({ ruleId: "secret-to-log", expires: "2099-12-31" });
+  });
+
+  it("loads explicit security scan path exclusions", () => {
+    const config = validateConfig({
+      securityCheck: {
+        excludePaths: ["tests/**", "e2e/**"],
+      },
+    });
+
+    expect(config.securityCheck.excludePaths).toEqual(["tests/**", "e2e/**"]);
+  });
+
+  it("loads an optional security baseline path", () => {
+    const config = validateConfig({
+      securityCheck: {
+        baselinePath: ".devguard-security-baseline.json",
+      },
+    });
+
+    expect(config.securityCheck.baselinePath).toBe(".devguard-security-baseline.json");
+  });
 });
 
 describe("preset and keyword helpers", () => {

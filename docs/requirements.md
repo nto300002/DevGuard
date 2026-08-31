@@ -74,6 +74,11 @@ The initial target user is the project owner.
 13. Manual test confirmation todos
 14. AI-agent confirmation blocks
 15. `pre-commit` and `pre-push` hook installation
+16. Security Flow checks for TypeScript, Python, PHP, Dart, YAML, and Dockerfile
+17. Syntax-aware source-to-sink checks with analysis-issue reporting
+18. `devguard security-check` and CI-friendly JSON output
+19. Security allowlist and baseline support with expiration/traceability
+20. Separate `Security Flow` and `General Vulnerability` detection modes
 
 ### Excluded
 
@@ -84,11 +89,9 @@ The initial target user is the project owner.
 - VS Code extension
 - AI review features
 - AI-generated code truth validation
-- AST analysis
 - Automatic fixes
 - Interactive todo input
 - Confirmation state persistence
-- GitHub Actions integration
 - AI-agent specific hook integration
 
 ## 6. Technology Requirements
@@ -408,7 +411,7 @@ The MVP does not strictly parse pre-push standard input refs. It uses `defaultBr
 Command:
 
 ```bash
-npx @nto300002/devguard check --staged
+npx --yes --package=@nto300002/devguard devguard check --staged
 ```
 
 Targets:
@@ -437,7 +440,7 @@ Exit codes:
 Command:
 
 ```bash
-npx @nto300002/devguard push-check --agent-block
+npx --yes --package=@nto300002/devguard devguard push-check --agent-block
 ```
 
 Push blockers:
@@ -445,6 +448,18 @@ Push blockers:
 1. Environment or secrets additions
 2. Out-of-scope DB/config changes
 3. Remaining variable logs under `personalStrictLog`
+
+### Security detection modes
+
+`devguard security-check` supports the default `all` mode and the following focused mode:
+
+```bash
+devguard security-check --mode security-flow
+devguard security-check --mode general
+devguard security-check --mode general --json
+```
+
+`security-flow` reports sensitive data source-to-sink flows. `general` reports vulnerability candidates such as SQL Injection, XSS, Command Injection, unsafe deserialization, SSRF, and Path Traversal. General findings are candidates, not confirmed vulnerabilities, and include category, CWE, OWASP category, confidence, remediation, file path, and line number.
 
 Exit codes:
 
@@ -502,7 +517,7 @@ High-risk push conditions:
 
 ## 17. Future Candidates
 
-- JSON output
+- GitHub Actions integration
 - Interactive todo input
 - Confirmation token persistence
 - GitHub Actions integration
@@ -510,5 +525,5 @@ High-risk push conditions:
 - GitHub Issue body fetching
 - VS Code extension
 - AI-agent specific hooks
-- AST analysis
+- Advanced Dart parser integration
 - First-class JavaScript, React, Django, Flutter, Java, C#, Go, and .NET presets

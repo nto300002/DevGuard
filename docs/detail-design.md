@@ -25,7 +25,7 @@ Core modules:
 - AI-agent confirmation block generator
 - Hook installer
 
-The implementation should favor simple, deterministic text and path analysis for the MVP. AST parsing and automatic code modification are intentionally out of scope.
+The implementation should favor simple, deterministic analysis for the MVP. Security checks use syntax-aware parsing where a stable runtime parser is available, with explicit analysis-issue reporting when parsing is unavailable. Automatic code modification remains out of scope.
 
 ## 2. Command Design
 
@@ -127,8 +127,23 @@ Responsibilities:
 - Resolve the hook directory with `git rev-parse --git-path hooks`.
 - Support submodule and worktree hook locations where `.git` may be a file or an indirection.
 - When `--include-submodules` is provided, enumerate initialized recursive submodules and install hooks into each repository.
-- Use `npx @nto300002/devguard check --staged` for `pre-commit`.
-- Use `npx @nto300002/devguard push-check --agent-block` for `pre-push`.
+- Use `npx --yes --package=@nto300002/devguard devguard check --staged` for `pre-commit`.
+- Use `npx --yes --package=@nto300002/devguard devguard push-check --agent-block` for `pre-push`.
+
+### `devguard security-check`
+
+`security-check` scans the repository and supports `--mode all`, `--mode security-flow`, and `--mode general`. The default is `all` for backward compatibility. General vulnerability rules produce candidate findings with `category`, `cwe`, `owaspCategory`, `confidence`, and remediation information; they do not claim that a vulnerability is confirmed.
+
+Initial general rules:
+
+- `general-sqli` (CWE-89)
+- `general-xss` (CWE-79)
+- `general-command-injection` (CWE-78)
+- `general-unsafe-deserialization` (CWE-502)
+- `general-ssrf` (CWE-918)
+- `general-path-traversal` (CWE-22)
+
+The implementation uses syntax-aware parsing already available for TypeScript, Python, and PHP, with conservative source-line checks for Dart. Safe patterns such as parameterized SQL and fixed command execution are covered by non-detection tests.
 
 ## 3. Internal Types
 

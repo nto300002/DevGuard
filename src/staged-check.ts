@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { loadConfig, mergeDefaultKeywordDatabase, type DevGuardConfig, type KeywordRule } from "./config.js";
 import { getAllDiff, getStagedDiff, getWorktreeDiff, type ChangedFile, type DiffLine, type GitDiffResult } from "./git-diff.js";
+import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanDiffLinesFromRepository, type SecurityAnalysisIssue, type SecurityFinding } from "./security-check.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -94,6 +95,8 @@ export type StagedCheckResult = {
   classifiedFiles: ClassifiedFiles;
   keywordFindings: KeywordFinding[];
   logFindings: LogFinding[];
+  securityFindings: SecurityFinding[];
+  securityIssues: SecurityAnalysisIssue[];
   suppressions: SuppressionComment[];
   risk: RiskResult;
   diffSize: DiffSizeSummary;
@@ -113,14 +116,21 @@ export async function runStagedCheck(gitRoot: string, diffScope: RunCheckStagedC
   const suppressions = parseSuppressionComments(stagedDiff.lines);
   const keywordFindings = applySuppressions(detectKeywordFindings(stagedDiff.lines), suppressions);
   const logFindings = applySuppressions(detectLogFindings(stagedDiff.lines), suppressions);
+  const securityScan = config.securityCheck.enabled ? await scanDiffLinesFromRepository(gitRoot, stagedDiff.lines, { excludePaths: config.securityCheck.excludePaths }) : { findings: [], analysisIssues: [] };
+  const baseline = await loadSecurityBaseline(gitRoot, config.securityCheck.baselinePath);
+  const securityFindings = applySecurityBaseline(applySecurityAllowlist(securityScan.findings, config.securityCheck.allowlist), baseline);
+  const risk = detectRisk([...keywordFindings, ...logFindings, ...securityFindings]);
+  const finalRisk = config.securityCheck.failOnUnparseable && securityScan.analysisIssues.length > 0 ? { ...risk, exitCode: 1 as const } : risk;
 
   return {
     files: stagedDiff.files,
     classifiedFiles,
     keywordFindings,
     logFindings,
+    securityFindings,
+    securityIssues: securityScan.analysisIssues,
     suppressions,
-    risk: detectRisk([...keywordFindings, ...logFindings]),
+    risk: finalRisk,
     diffSize: evaluateDiffSize(stagedDiff.files, stagedDiff.lines),
     recommendedTests: resolveTestCommands(classifiedFiles, config),
     checklist: generateChecklist(classifiedFiles),
@@ -503,6 +513,21 @@ export function formatStagedCheckResult(result: StagedCheckResult, commandName =
       const label = finding.type === "keyword" ? formatKeywordLabel(finding.ruleId, finding.label) : formatLogKind(finding.kind);
       lines.push(`- [${formatSeverity(finding.severity)}${suppressed}] ${label}: ${finding.filePath}${finding.lineNumber ? `:${finding.lineNumber}` : ""} ${finding.preview}`);
     }
+  }
+
+  lines.push("");
+  lines.push("Security Flow検出:");
+  if (result.securityFindings.length === 0) {
+    lines.push("- なし");
+  } else {
+    for (const finding of result.securityFindings) {
+      const suppressed = finding.suppressed ? " 抑制済み" : "";
+      lines.push(`- [${formatSeverity(finding.severity)}${suppressed}] ${finding.ruleId}: ${finding.filePath}:${finding.lineNumber} ${finding.flow}`);
+    }
+  }
+  if (result.securityIssues.length > 0) {
+    lines.push("解析不能:");
+    for (const issue of result.securityIssues) lines.push(`- ${issue.filePath}: ${issue.message}`);
   }
 
   const highSuppressions = findings.filter((finding) => finding.severity === "high" && finding.suppressed);

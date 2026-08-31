@@ -128,6 +128,22 @@ describe("devguard push-check", () => {
     expect(result.agentBlock).toContain("required_user_confirmations");
   });
 
+  it("blocks a push when a staged commit introduces a secret-to-log flow", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "auth.ts"), "const key = process.env.API_KEY;\nlogger.error(key);\n");
+    await git(repo, ["add", "src/auth.ts"]);
+    await git(repo, ["commit", "-m", "add auth logging"]);
+
+    const result = await runPushCheck(repo);
+
+    expect(result.pushAllowed).toBe(false);
+    expect(result.securityFindings).toEqual([
+      expect.objectContaining({ ruleId: "secret-to-log", filePath: "src/auth.ts", severity: "high" }),
+    ]);
+    expect(result.blockedReasons).toContain("security_high_risk");
+  });
+
   it("returns exit code 1 for blocked CLI push-check", async () => {
     const repo = await createRepo();
     await mkdir(path.join(repo, "src"), { recursive: true });

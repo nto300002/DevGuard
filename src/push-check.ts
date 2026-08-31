@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { loadConfig, type DevGuardConfig } from "./config.js";
 import { getDefaultBranchDiff, type ChangedFile, type DiffLine } from "./git-diff.js";
 import { detectLogFindings, type LogFinding } from "./staged-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanDiffLinesFromRepository, type SecurityAnalysisIssue, type SecurityFinding } from "./security-check.js";
 
 export type EnvFinding = {
   name: string;
@@ -17,7 +18,7 @@ export type ScopeFinding = {
   scope: string;
 };
 
-export type PushBlockedReason = "env_secrets_added" | "out_of_scope_db_config" | "personal_strict_variable_log";
+export type PushBlockedReason = "env_secrets_added" | "out_of_scope_db_config" | "personal_strict_variable_log" | "security_high_risk" | "security_unparseable";
 
 export type PushTodo = {
   id: string;
@@ -34,6 +35,8 @@ export type PushCheckResult = {
   envFindings: EnvFinding[];
   scopeFindings: ScopeFinding[];
   logFindings: LogFinding[];
+  securityFindings: SecurityFinding[];
+  securityIssues: SecurityAnalysisIssue[];
   todos: PushTodo[];
   agentPrompt?: string;
   agentBlock?: string;
@@ -59,10 +62,13 @@ export async function runPushCheck(gitRoot: string, options: PushCheckOptions = 
   const scope = options.scope ?? "frontend";
   const scopeFindings = config.issueScope.enabled ? issueScopeCheck(diff.files, scope) : [];
   const logFindings = detectLogFindings(diff.lines).filter((finding) => !finding.suppressed && (finding.kind === "variable-log" || finding.kind === "sensitive-log" || finding.kind === "logger-debug" || finding.kind === "print-variable"));
-  const blockedReasons = getBlockedReasons({ envFindings, scopeFindings, logFindings, config });
+  const securityScan = config.securityCheck.enabled ? await scanDiffLinesFromRepository(gitRoot, diff.lines, { excludePaths: config.securityCheck.excludePaths }) : { findings: [], analysisIssues: [] };
+  const baseline = await loadSecurityBaseline(gitRoot, config.securityCheck.baselinePath);
+  const securityFindings = applySecurityBaseline(applySecurityAllowlist(securityScan.findings, config.securityCheck.allowlist), baseline);
+  const blockedReasons = getBlockedReasons({ envFindings, scopeFindings, logFindings, securityFindings, securityIssues: securityScan.analysisIssues, config });
   const todos = generatePushTodos({ envFindings, scopeFindings, logFindings });
   const pushAllowed = blockedReasons.length === 0;
-  const files = collectRelatedFiles(envFindings, scopeFindings, logFindings);
+  const files = collectRelatedFiles(envFindings, scopeFindings, logFindings, securityFindings);
 
   return {
     pushAllowed,
@@ -71,6 +77,8 @@ export async function runPushCheck(gitRoot: string, options: PushCheckOptions = 
     envFindings,
     scopeFindings,
     logFindings,
+    securityFindings,
+    securityIssues: securityScan.analysisIssues,
     todos,
     agentPrompt: options.agentBlock || config.pushCheck.agentBlock ? generateAgentPrompt() : undefined,
     agentBlock: !pushAllowed && (options.agentBlock || config.pushCheck.agentBlock) ? generateAgentBlock({ blockedReasons, files, todos }) : undefined,
@@ -233,8 +241,20 @@ export function formatPushCheckResult(result: PushCheckResult): string {
     }
   }
 
+  if (result.securityFindings.length > 0) {
+    lines.push("Security Flow検出:");
+    for (const finding of result.securityFindings) {
+      const suppressed = finding.suppressed ? " 抑制済み" : "";
+      lines.push(`- [${finding.severity}${suppressed}] ${finding.ruleId}: ${finding.filePath}:${finding.lineNumber} ${finding.flow}`);
+    }
+  }
+  if (result.securityIssues.length > 0) {
+    lines.push("解析不能:");
+    for (const issue of result.securityIssues) lines.push(`- ${issue.filePath}: ${issue.message}`);
+  }
+
   lines.push("ファイル:");
-  const files = collectRelatedFiles(result.envFindings, result.scopeFindings, result.logFindings);
+  const files = collectRelatedFiles(result.envFindings, result.scopeFindings, result.logFindings, result.securityFindings);
   for (const file of files.length > 0 ? files : ["なし"]) {
     lines.push(`- ${file}`);
   }
@@ -294,6 +314,8 @@ function formatBlockedReason(reason: PushBlockedReason): string {
     env_secrets_added: "環境変数またはsecretの追加",
     out_of_scope_db_config: "scope外のDB/config変更",
     personal_strict_variable_log: "変数debug logの残存",
+    security_high_risk: "Security FlowのHigh検出",
+    security_unparseable: "Security Flowの解析不能",
   }[reason];
 }
 
@@ -338,7 +360,7 @@ async function readEnvExampleKeys(gitRoot: string): Promise<Set<string>> {
   return keys;
 }
 
-function getBlockedReasons(input: { envFindings: EnvFinding[]; scopeFindings: ScopeFinding[]; logFindings: LogFinding[]; config: DevGuardConfig }): PushBlockedReason[] {
+function getBlockedReasons(input: { envFindings: EnvFinding[]; scopeFindings: ScopeFinding[]; logFindings: LogFinding[]; securityFindings: SecurityFinding[]; securityIssues: SecurityAnalysisIssue[]; config: DevGuardConfig }): PushBlockedReason[] {
   const reasons: PushBlockedReason[] = [];
   if (input.config.pushCheck.blockOn.envSecretsAdded && input.envFindings.length > 0) {
     reasons.push("env_secrets_added");
@@ -348,6 +370,12 @@ function getBlockedReasons(input: { envFindings: EnvFinding[]; scopeFindings: Sc
   }
   if (input.config.pushCheck.blockOn.personalStrictVariableLog && input.logFindings.length > 0) {
     reasons.push("personal_strict_variable_log");
+  }
+  if (input.securityFindings.some((finding) => !finding.suppressed && finding.severity === "high")) {
+    reasons.push("security_high_risk");
+  }
+  if (input.config.securityCheck.failOnUnparseable && input.securityIssues.length > 0) {
+    reasons.push("security_unparseable");
   }
   return reasons;
 }
@@ -416,11 +444,12 @@ function dedupeTodos(todos: PushTodo[]): PushTodo[] {
   });
 }
 
-function collectRelatedFiles(envFindings: Array<Pick<EnvFinding, "filePath" | "lineNumber">>, scopeFindings: Array<Pick<ScopeFinding, "filePath">>, logFindings: Array<Pick<LogFinding, "filePath" | "lineNumber">>): string[] {
+function collectRelatedFiles(envFindings: Array<Pick<EnvFinding, "filePath" | "lineNumber">>, scopeFindings: Array<Pick<ScopeFinding, "filePath">>, logFindings: Array<Pick<LogFinding, "filePath" | "lineNumber">>, securityFindings: Array<Pick<SecurityFinding, "filePath" | "lineNumber">> = []): string[] {
   return [
     ...envFindings.map((finding) => formatFileRef(finding.filePath, finding.lineNumber)),
     ...scopeFindings.map((finding) => finding.filePath),
     ...logFindings.map((finding) => formatFileRef(finding.filePath, finding.lineNumber)),
+    ...securityFindings.map((finding) => formatFileRef(finding.filePath, finding.lineNumber)),
   ];
 }
 
