@@ -1,10 +1,10 @@
 {
-  "name": "@nto300002/devguard",
-  "version": "0.1.8",
+  "name": "agent-safecheck",
+  "version": "0.1.11",
   "description": "Pre-commit and pre-push self-review CLI for AI-assisted development.",
   "type": "module",
   "bin": {
-    "devguard": "dist/cli.js"
+    "safecheck": "dist/cli.js"
   },
   "files": [
     "dist"
