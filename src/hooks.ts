@@ -30,13 +30,13 @@ const HOOKS: Record<HookName, string> = {
   "pre-commit": `#!/bin/sh
 set -e
 
-DEVGUARD_BIN="\${DEVGUARD_BIN:-npx --yes --package=@nto300002/devguard devguard}"
+DEVGUARD_BIN="\${DEVGUARD_BIN:-npx --yes --package=agent-safecheck safecheck}"
 $DEVGUARD_BIN check --staged
 `,
   "pre-push": `#!/bin/sh
 set -e
 
-DEVGUARD_BIN="\${DEVGUARD_BIN:-npx --yes --package=@nto300002/devguard devguard}"
+DEVGUARD_BIN="\${DEVGUARD_BIN:-npx --yes --package=agent-safecheck safecheck}"
 $DEVGUARD_BIN push-check --agent-block
 `,
 };
@@ -102,7 +102,7 @@ async function listInitializedSubmoduleRoots(gitRoot: string): Promise<string[]>
 }
 
 export function formatHookInstallResult(result: HookInstallResult): string {
-  const lines = ["DevGuard install-hooks"];
+  const lines = ["SafeCheck install-hooks"];
   const repositories = result.repositories ?? [];
 
   if (repositories.length > 1) {

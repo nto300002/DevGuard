@@ -44,7 +44,7 @@ export async function detectRoot(cwd = process.cwd()): Promise<RootDetectionResu
   const isBareRepository = (await runGit(absoluteCwd, ["rev-parse", "--is-bare-repository"])).trim() === "true";
 
   if (!insideWorkTree || isBareRepository) {
-    throw new RootDetectionError("DevGuardはbareではないGit作業ツリー内で実行してください。");
+    throw new RootDetectionError("SafeCheckはbareではないGit作業ツリー内で実行してください。");
   }
 
   const gitRoot = await realpath(await runGit(absoluteCwd, ["rev-parse", "--show-toplevel"]));
@@ -87,7 +87,7 @@ export function toRootRelativePath(gitRoot: string, targetPath: string): string 
 
 export function formatDoctorResult(result: RootDetectionResult): string {
   return [
-    "DevGuard doctor",
+    "SafeCheck doctor",
     "",
     "Git:",
     `- 作業ツリー内: ${result.isInsideWorkTree}`,

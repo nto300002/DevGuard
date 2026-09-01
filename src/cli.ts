@@ -11,23 +11,23 @@ import { runPushCheckCommand } from "./push-check.js";
 import { loadConfig } from "./config.js";
 import { applySecurityAllowlist, applySecurityBaseline, filterSecurityFindingsByMode, loadSecurityBaseline, scanRepositoryDetailed, type SecurityAnalysisIssue, type SecurityFinding, type SecurityScanMode } from "./security-check.js";
 
-const helpText = `DevGuard
+const helpText = `SafeCheck
 
 使い方:
-  devguard doctor
-  devguard init
-  devguard check --staged
-  devguard check --staged-diff
-  devguard check --worktree-diff
-  devguard check --all-diff
-  devguard security-check
-  devguard security-check --json
-  devguard security-check --sarif
-  devguard security-check --mode general
-  devguard security-check --write-baseline
-  devguard push-check
-  devguard install-hooks [--include-submodules]
-  devguard --help
+  safecheck doctor
+  safecheck init
+  safecheck check --staged
+  safecheck check --staged-diff
+  safecheck check --worktree-diff
+  safecheck check --all-diff
+  safecheck security-check
+  safecheck security-check --json
+  safecheck security-check --sarif
+  safecheck security-check --mode general
+  safecheck security-check --write-baseline
+  safecheck push-check
+  safecheck install-hooks [--include-submodules]
+  safecheck --help
 
 AI開発向けのpre-commit / pre-pushセルフレビューCLIです。
 `;
@@ -92,13 +92,13 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   }
 
   process.stderr.write(`不明なコマンド: ${args.join(" ")}\n`);
-  process.stderr.write("使い方は devguard --help を確認してください。\n");
+  process.stderr.write("使い方は safecheck --help を確認してください。\n");
   return 1;
 }
 
 export function formatSecurityCheckResult(findings: SecurityFinding[], analysisIssues: SecurityAnalysisIssue[] = []): string {
   const suppressedCount = findings.filter((finding) => finding.suppressed).length;
-  const lines = ["DevGuard security-check", `検出件数: ${findings.length}`, `抑制済み: ${suppressedCount}`];
+  const lines = ["SafeCheck security-check", `検出件数: ${findings.length}`, `抑制済み: ${suppressedCount}`];
   lines.push(`解析不能: ${analysisIssues.length}`);
   const activeFindings = findings.filter((finding) => !finding.suppressed);
   const byRule = new Map<string, number>();
@@ -201,7 +201,7 @@ export function formatSecurityCheckSarif(findings: SecurityFinding[], analysisIs
     version: "2.1.0",
     $schema: "https://json.schemastore.org/sarif-2.1.0.json",
     runs: [{
-      tool: { driver: { name: "DevGuard", informationUri: "https://github.com/nto300002/DevGuard", rules } },
+      tool: { driver: { name: "SafeCheck", informationUri: "https://www.npmjs.com/package/agent-safecheck", rules } },
       results,
       invocations: [{ executionSuccessful: analysisIssues.length === 0, toolExecutionNotifications: notifications }],
       columnKind: "utf16CodeUnits",
