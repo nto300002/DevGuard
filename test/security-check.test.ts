@@ -36,6 +36,20 @@ describe("security flow scan", () => {
     ]);
   });
 
+  it("does not classify database helpers as SSRF or safe argument arrays as command injection", () => {
+    const findings = scanText("app/repository.py", "record = db.get(request_id)\nsubprocess.run([\"tool\", args], shell=False)\n", "python");
+
+    expect(findings.filter((finding) => finding.ruleId === "general-ssrf" || finding.ruleId === "general-command-injection")).toEqual([]);
+  });
+
+  it("lowers confidence for SQL built from a fixed identifier allowlist", () => {
+    const findings = scanText("app/query.py", "allowed_tables = [\"users\", \"orders\"]\ndb.execute(f\"SELECT * FROM {allowed_tables[0]}\")\n", "python");
+
+    expect(findings).toEqual([
+      expect.objectContaining({ ruleId: "general-sqli", confidence: "low", severity: "high" }),
+    ]);
+  });
+
   it("uses syntax-aware data flow instead of marking an unrelated log", () => {
     const findings = scanText(
       "src/auth.ts",

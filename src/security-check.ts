@@ -175,6 +175,7 @@ function addGeneralFindings(result: SecurityScanTextResult, filePath: string, co
 function scanGeneralVulnerabilities(filePath: string, content: string, language: SecurityLanguage): SecurityFinding[] {
   const findings: SecurityFinding[] = [];
   const lines = content.split(/\r?\n/);
+  const usesFixedIdentifierAllowlist = /(?:allowed|allowlist|whitelist|permitted|valid)[\w-]*\s*=\s*\[(?:\s*["'][^"']+["']\s*,?)+\s*\]/i.test(content);
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
     const add = (ruleId: string, sink: SecuritySink, cwe: string, owaspCategory: string, message: string, remediation: string, confidence: SecurityFinding["confidence"] = "medium") => {
@@ -190,8 +191,8 @@ function scanGeneralVulnerabilities(filePath: string, content: string, language:
     }
 
     if (language === "python") {
-      if (/(?:subprocess\.(?:run|call|Popen)|os\.system|os\.popen)\s*\(/.test(line) && /(?:request|input|payload|args|shell\s*=\s*True)/i.test(line)) add("general-command-injection", "command", "CWE-78", "A03:2021-Injection", "外部入力がコマンド実行APIへ到達する可能性があります。", "shell実行を避け、固定コマンドと引数配列を使用してください。");
-      if (/(?:cursor|connection|db|session)\.(?:execute|query)\s*\(/.test(line) && /(?:f["']|\+|%|format\s*\()/i.test(line)) add("general-sqli", "sql", "CWE-89", "A03:2021-Injection", "動的なSQL文字列を実行している可能性があります。", "parameterized queryを使用してください。");
+      if (/(?:subprocess\.(?:run|call|Popen)|os\.system|os\.popen)\s*\(/.test(line) && /(?:shell\s*=\s*True|f["']|["'][^"']*["']\s*\+|\.format\s*\()/i.test(line)) add("general-command-injection", "command", "CWE-78", "A03:2021-Injection", "外部入力がコマンド実行APIへ到達する可能性があります。", "shell実行を避け、固定コマンドと引数配列を使用してください。");
+      if (/(?:cursor|connection|db|session)\.(?:execute|query)\s*\(/.test(line) && /(?:f["']|\+|%|format\s*\()/i.test(line)) add("general-sqli", "sql", "CWE-89", "A03:2021-Injection", "動的なSQL文字列を実行している可能性があります。", "parameterized queryを使用してください。", usesFixedIdentifierAllowlist ? "low" : "medium");
       if (/(?:pickle\.loads|yaml\.load)\s*\(/.test(line) && /(?:request|input|payload|data|body)/i.test(line)) add("general-unsafe-deserialization", "deserialization", "CWE-502", "A08:2021-Software and Data Integrity Failures", "外部入力を安全でない方式でデシリアライズする可能性があります。", "安全な形式へ変更し、型・スキーマ検証を行ってください。");
       if (/(?:requests?\.(?:get|post|request)|urllib\.request\.urlopen)\s*\(/.test(line) && /(?:request|url|target|input)/i.test(line)) add("general-ssrf", "http-client", "CWE-918", "A10:2021-SSRF", "外部入力でHTTP接続先を指定できる可能性があります。", "接続先を許可リストで制限してください。");
       if (/(?:open|Path\s*\()\s*\(/.test(line) && /(?:request|path|file|input)/i.test(line)) add("general-path-traversal", "file", "CWE-22", "A01:2021-Broken Access Control", "外部入力がファイルパスへ使われる可能性があります。", "パスを正規化し、許可ディレクトリ配下に制限してください。");
