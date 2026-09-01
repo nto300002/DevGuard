@@ -17,7 +17,7 @@ describe("devguard CLI", () => {
       cwd: repoRoot,
     });
 
-    expect(stdout).toContain("DevGuard");
+    expect(stdout).toContain("SafeCheck");
     expect(stdout).toContain("使い方:");
     expect(stdout).toContain("doctor");
     expect(stdout).toContain("check --staged");
@@ -77,7 +77,7 @@ describe("devguard CLI", () => {
     expect(sarif.version).toBe("2.1.0");
     expect(sarif.$schema).toContain("sarif-2.1.0");
     expect(sarif.runs).toHaveLength(1);
-    expect(sarif.runs[0].tool.driver.name).toBe("DevGuard");
+    expect(sarif.runs[0].tool.driver.name).toBe("SafeCheck");
     expect(sarif.runs[0].results).toEqual(expect.arrayContaining([
       expect.objectContaining({ ruleId: "secret-to-log", level: "error", properties: expect.objectContaining({ category: "security-flow", confidence: "high" }) }),
       expect.objectContaining({ ruleId: "general-sqli", properties: expect.objectContaining({ category: "general-vulnerability", cwe: "CWE-89", owaspCategory: "A03:2021-Injection" }) }),

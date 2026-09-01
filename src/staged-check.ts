@@ -486,7 +486,7 @@ export function suggestCommitPlan(classified: ClassifiedFiles): CommitPlanItem[]
 
 export function formatStagedCheckResult(result: StagedCheckResult, commandName = "check --staged"): string {
   const lines: string[] = [];
-  lines.push(`DevGuard ${commandName}`);
+  lines.push(`SafeCheck ${commandName}`);
   lines.push(`リスク: ${formatSeverity(result.risk.level)}`);
   lines.push("");
   lines.push("ファイル:");

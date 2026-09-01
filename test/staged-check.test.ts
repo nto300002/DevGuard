@@ -319,7 +319,7 @@ describe("devguard check --staged", () => {
 
     const { stdout } = await execFileAsync(tsxBin, [cliPath, "check", "--staged-diff"], { cwd: repo });
 
-    expect(stdout).toContain("DevGuard check --staged-diff");
+    expect(stdout).toContain("SafeCheck check --staged-diff");
     expect(stdout).toContain("差分サイズ:");
     expect(stdout).toContain("- ファイル数: 6");
     expect(stdout).toContain("- 変更行数: 156");
@@ -334,7 +334,7 @@ describe("devguard check --staged", () => {
 
     await expect(execFileAsync(tsxBin, [cliPath, "check", "--worktree-diff"], { cwd: repo })).rejects.toMatchObject({
       code: 1,
-      stdout: expect.stringContaining("DevGuard check --worktree-diff"),
+      stdout: expect.stringContaining("SafeCheck check --worktree-diff"),
     });
   });
 
@@ -347,7 +347,7 @@ describe("devguard check --staged", () => {
 
     const { stdout } = await execFileAsync(tsxBin, [cliPath, "check", "--all-diff"], { cwd: repo });
 
-    expect(stdout).toContain("DevGuard check --all-diff");
+    expect(stdout).toContain("SafeCheck check --all-diff");
     expect(stdout).toContain("src/staged.ts (追加)");
     expect(stdout).toContain("src/unstaged.ts (追加)");
     expect(stdout).toContain("ブラウザストレージ使用");

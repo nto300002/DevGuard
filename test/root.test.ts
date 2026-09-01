@@ -90,7 +90,7 @@ describe("devguard doctor", () => {
 
     const { stdout } = await execFileAsync(tsxBin, [cliPath, "doctor"], { cwd: repo });
 
-    expect(stdout).toContain("DevGuard doctor");
+    expect(stdout).toContain("SafeCheck doctor");
     expect(stdout).toContain("作業ツリー内: true");
     expect(stdout).toContain(`Git root: ${realRepo}`);
     expect(stdout).toContain("設定読み込み済み: false");
