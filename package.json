@@ -1,6 +1,6 @@
 {
   "name": "agent-safecheck",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Pre-commit and pre-push self-review CLI for AI-assisted development.",
   "type": "module",
   "bin": {
