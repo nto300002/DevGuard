@@ -1,5 +1,7 @@
 # DevGuard
 
+セキュリティ課題の一覧と、#33 → #34/#36 → 各子Issue → main統合の実装順序は [`docs/security-roadmap.md`](docs/security-roadmap.md) を参照してください。
+
 DevGuardは、`git commit` や `git push` の前に危険な変更を検出し、開発者が一度立ち止まって確認できるようにする TypeScript + Node.js 製のCLIツールです。
 
 AIコーディングやADHD傾向のある開発フローでは、コード品質そのものよりも「確認漏れ」が問題になりがちです。DevGuardは、commit粒度の粗さ、debug logの消し忘れ、環境変数やSecretsの確認漏れ、Issueスコープ外のDB/config変更、レビュー前確認の曖昧さをGit操作前に可視化します。
