@@ -32,6 +32,11 @@ export type NextModuleAstAnalysis = {
   dangerouslySetInnerHTML: Array<{ lineNumber: number }>;
 };
 
+export type NextModuleGraphAnalysis = {
+  modules: Array<{ filePath: string; executionContext: NextExecutionContext }>;
+  unresolvedImports: Array<{ from: string; specifier: string }>;
+};
+
 export type SecurityFinding = {
   id: string;
   ruleId: string;
@@ -118,6 +123,71 @@ export function analyzeNextModuleAst(filePath: string, content: string): NextMod
     browserOnlyUsages: dedupeNextBrowserOnlyUsages(browserOnlyUsages),
     dangerouslySetInnerHTML: dedupeNextLines(dangerouslySetInnerHTML),
   };
+}
+
+export function analyzeNextModuleGraph(entryFilePath: string, files: Readonly<Record<string, string>>): NextModuleGraphAnalysis {
+  const normalizedFiles = new Map(Object.entries(files).map(([filePath, content]) => [normalizeNextPath(filePath), content]));
+  const modules: NextModuleGraphAnalysis["modules"] = [];
+  const unresolvedImports: NextModuleGraphAnalysis["unresolvedImports"] = [];
+  const visited = new Set<string>();
+  const unresolved = new Set<string>();
+
+  const visit = (filePath: string): void => {
+    const normalizedFilePath = normalizeNextPath(filePath);
+    if (visited.has(normalizedFilePath)) return;
+    const content = normalizedFiles.get(normalizedFilePath);
+    if (content === undefined) return;
+    visited.add(normalizedFilePath);
+    modules.push({ filePath: normalizedFilePath, executionContext: detectNextModuleContext(normalizedFilePath, content).executionContext });
+
+    const sourceFile = ts.createSourceFile(normalizedFilePath, content, ts.ScriptTarget.Latest, true, scriptKindForPath(normalizedFilePath));
+    for (const specifier of nextImportSpecifiers(sourceFile)) {
+      if (!specifier.startsWith(".")) continue;
+      const resolved = resolveNextImport(normalizedFilePath, specifier, normalizedFiles);
+      if (resolved) {
+        visit(resolved);
+      } else {
+        const key = `${normalizedFilePath}:${specifier}`;
+        if (!unresolved.has(key)) {
+          unresolved.add(key);
+          unresolvedImports.push({ from: normalizedFilePath, specifier });
+        }
+      }
+    }
+  };
+
+  visit(entryFilePath);
+  return { modules, unresolvedImports };
+}
+
+function nextImportSpecifiers(sourceFile: ts.SourceFile): string[] {
+  const specifiers: string[] = [];
+  const add = (node: ts.StringLiteralLike | undefined): void => {
+    if (node) specifiers.push(node.text);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node)) add(ts.isStringLiteral(node.moduleSpecifier) ? node.moduleSpecifier : undefined);
+    if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) add(node.moduleSpecifier);
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments.length === 1) {
+      const argument = node.arguments[0];
+      if (argument && ts.isStringLiteral(argument)) add(argument);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return [...new Set(specifiers)];
+}
+
+function resolveNextImport(fromFilePath: string, specifier: string, files: ReadonlyMap<string, string>): string | undefined {
+  const basePath = normalizeNextPath(path.posix.join(path.posix.dirname(fromFilePath), specifier));
+  const candidates = /\.[a-z]+$/i.test(basePath)
+    ? [basePath]
+    : [basePath, `${basePath}.ts`, `${basePath}.tsx`, `${basePath}.js`, `${basePath}.jsx`, `${basePath}/index.ts`, `${basePath}/index.tsx`, `${basePath}/index.js`, `${basePath}/index.jsx`];
+  return candidates.find((candidate) => files.has(candidate));
+}
+
+function normalizeNextPath(filePath: string): string {
+  return path.posix.normalize(filePath.replaceAll("\\", "/")).replace(/^\.\//, "");
 }
 
 function isNextBrowserGlobal(name: string): name is NextBrowserOnlyUsage["name"] {

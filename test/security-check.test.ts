@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { analyzeNextModuleAst, applySecurityAllowlist, applySecurityBaseline, detectNextModuleContext, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
+import { analyzeNextModuleAst, analyzeNextModuleGraph, applySecurityAllowlist, applySecurityBaseline, detectNextModuleContext, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
 
 describe("security flow scan", () => {
   it("detects Next.js client and route-handler execution contexts from module directives and paths", () => {
@@ -48,6 +48,31 @@ describe("security flow scan", () => {
 
     expect(result.browserOnlyUsages).toEqual([]);
     expect(result.dangerouslySetInnerHTML).toEqual([]);
+  });
+
+  it("follows relative imports and records referenced Next.js module contexts", () => {
+    const result = analyzeNextModuleGraph("app/page.tsx", {
+      "app/page.tsx": '"use client";\nimport Widget from "./components/Widget";\nimport { value } from "../shared/value";\n',
+      "app/components/Widget.tsx": "export default function Widget() { return <button />; }\n",
+      "shared/value.ts": '"use server";\nexport const value = 1;\n',
+    });
+
+    expect(result.modules).toEqual([
+      { filePath: "app/page.tsx", executionContext: "client" },
+      { filePath: "app/components/Widget.tsx", executionContext: "unknown" },
+      { filePath: "shared/value.ts", executionContext: "server" },
+    ]);
+    expect(result.unresolvedImports).toEqual([]);
+  });
+
+  it("does not loop on circular imports and reports unresolved relative imports", () => {
+    const result = analyzeNextModuleGraph("app/page.tsx", {
+      "app/page.tsx": 'import "./a";\nimport "./missing";\n',
+      "app/a.ts": 'import "./page";\n',
+    });
+
+    expect(result.modules.map((module) => module.filePath)).toEqual(["app/page.tsx", "app/a.ts"]);
+    expect(result.unresolvedImports).toEqual([{ from: "app/page.tsx", specifier: "./missing" }]);
   });
 
   it("detects TypeScript environment values flowing into logs", () => {
