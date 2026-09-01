@@ -34,6 +34,12 @@ export type NextModuleAstAnalysis = {
 
 export type NextModuleGraphAnalysis = {
   modules: Array<{ filePath: string; executionContext: NextExecutionContext }>;
+  boundaries: Array<{
+    from: string;
+    to: string;
+    fromContext: NextExecutionContext;
+    toContext: NextExecutionContext;
+  }>;
   unresolvedImports: Array<{ from: string; specifier: string }>;
 };
 
@@ -128,6 +134,7 @@ export function analyzeNextModuleAst(filePath: string, content: string): NextMod
 export function analyzeNextModuleGraph(entryFilePath: string, files: Readonly<Record<string, string>>): NextModuleGraphAnalysis {
   const normalizedFiles = new Map(Object.entries(files).map(([filePath, content]) => [normalizeNextPath(filePath), content]));
   const modules: NextModuleGraphAnalysis["modules"] = [];
+  const boundaries: NextModuleGraphAnalysis["boundaries"] = [];
   const unresolvedImports: NextModuleGraphAnalysis["unresolvedImports"] = [];
   const visited = new Set<string>();
   const unresolved = new Set<string>();
@@ -138,13 +145,19 @@ export function analyzeNextModuleGraph(entryFilePath: string, files: Readonly<Re
     const content = normalizedFiles.get(normalizedFilePath);
     if (content === undefined) return;
     visited.add(normalizedFilePath);
-    modules.push({ filePath: normalizedFilePath, executionContext: detectNextModuleContext(normalizedFilePath, content).executionContext });
+    const fromContext = detectNextModuleContext(normalizedFilePath, content).executionContext;
+    modules.push({ filePath: normalizedFilePath, executionContext: fromContext });
 
     const sourceFile = ts.createSourceFile(normalizedFilePath, content, ts.ScriptTarget.Latest, true, scriptKindForPath(normalizedFilePath));
     for (const specifier of nextImportSpecifiers(sourceFile)) {
       if (!specifier.startsWith(".")) continue;
       const resolved = resolveNextImport(normalizedFilePath, specifier, normalizedFiles);
       if (resolved) {
+        const targetContent = normalizedFiles.get(resolved);
+        const toContext = targetContent === undefined ? "unknown" : detectNextModuleContext(resolved, targetContent).executionContext;
+        if (fromContext === "client" && (toContext === "server" || toContext === "route-handler")) {
+          boundaries.push({ from: normalizedFilePath, to: resolved, fromContext, toContext });
+        }
         visit(resolved);
       } else {
         const key = `${normalizedFilePath}:${specifier}`;
@@ -157,7 +170,17 @@ export function analyzeNextModuleGraph(entryFilePath: string, files: Readonly<Re
   };
 
   visit(entryFilePath);
-  return { modules, unresolvedImports };
+  return { modules, boundaries: dedupeNextBoundaries(boundaries), unresolvedImports };
+}
+
+function dedupeNextBoundaries(boundaries: NextModuleGraphAnalysis["boundaries"]): NextModuleGraphAnalysis["boundaries"] {
+  const seen = new Set<string>();
+  return boundaries.filter((boundary) => {
+    const key = `${boundary.from}:${boundary.to}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function nextImportSpecifiers(sourceFile: ts.SourceFile): string[] {

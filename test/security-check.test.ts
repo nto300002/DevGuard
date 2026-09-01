@@ -62,6 +62,9 @@ describe("security flow scan", () => {
       { filePath: "app/components/Widget.tsx", executionContext: "unknown" },
       { filePath: "shared/value.ts", executionContext: "server" },
     ]);
+    expect(result.boundaries).toEqual([
+      { from: "app/page.tsx", to: "shared/value.ts", fromContext: "client", toContext: "server" },
+    ]);
     expect(result.unresolvedImports).toEqual([]);
   });
 
@@ -72,6 +75,7 @@ describe("security flow scan", () => {
     });
 
     expect(result.modules.map((module) => module.filePath)).toEqual(["app/page.tsx", "app/a.ts"]);
+    expect(result.boundaries).toEqual([]);
     expect(result.unresolvedImports).toEqual([{ from: "app/page.tsx", specifier: "./missing" }]);
   });
 
