@@ -28,6 +28,7 @@ export type SecurityFinding = {
   message: string;
   remediation: string;
   category: SecurityFindingCategory;
+  detectionOrigin?: "static" | "runtime";
   cwe?: string;
   owaspCategory?: string;
   suppressed?: boolean;
