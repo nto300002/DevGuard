@@ -46,6 +46,19 @@ describe("security flow scan", () => {
     ]);
   });
 
+  it("integrates dangerouslySetInnerHTML AST findings with the module context", () => {
+    const findings = scanText("app/page.tsx", '"use client";\nreturn <div dangerouslySetInnerHTML={{ __html: html }} />;\n', "typescript");
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "general-xss",
+        executionContext: "client",
+        confidence: "high",
+        lineNumber: 2,
+      }),
+    ]);
+  });
+
   it("detects browser-only APIs and dangerouslySetInnerHTML from a Next.js AST", () => {
     const result = analyzeNextModuleAst(
       "app/dashboard/page.tsx",

@@ -571,8 +571,8 @@ function scanTypeScriptAstDetailed(filePath: string, content: string, astEnabled
   };
 
   visit(sourceFile);
-  if (moduleContext && (moduleContext.executionContext === "server" || moduleContext.executionContext === "route-handler")) {
-    const nextAst = analyzeNextModuleAst(filePath, content);
+  const nextAst = moduleContext ? analyzeNextModuleAst(filePath, content) : undefined;
+  if (nextAst && (nextAst.executionContext === "server" || nextAst.executionContext === "route-handler")) {
     for (const usage of nextAst.browserOnlyUsages) {
       findings.push(createFinding({
         filePath,
@@ -587,7 +587,28 @@ function scanTypeScriptAstDetailed(filePath: string, content: string, astEnabled
         flow: `server module -> ${usage.name}`,
         message: `Server側モジュールでブラウザ専用API（${usage.name}）を使用しています。`,
         remediation: "ブラウザ専用APIはClient Componentへ移動するか、サーバー実行時に呼ばれない構成へ分離してください。",
-        executionContext: moduleContext.executionContext,
+        executionContext: nextAst.executionContext,
+      }));
+    }
+  }
+  if (nextAst) {
+    for (const usage of nextAst.dangerouslySetInnerHTML) {
+      findings.push(createFinding({
+        filePath,
+        lineNumber: usage.lineNumber,
+        language: "typescript",
+        category: "general-vulnerability",
+        ruleId: "general-xss",
+        severity: "high",
+        confidence: "high",
+        source: "user-input",
+        sink: "html",
+        flow: "external input -> html",
+        cwe: "CWE-79",
+        owaspCategory: "A03:2021-Injection",
+        message: "JSXのdangerouslySetInnerHTMLへ未検証の値が挿入される可能性があります。",
+        remediation: "出力エスケープまたは安全なHTMLサニタイズを使用してください。",
+        executionContext: nextAst.executionContext,
       }));
     }
   }
