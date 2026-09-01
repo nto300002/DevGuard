@@ -9,8 +9,8 @@ import type { DiffLine } from "./git-diff.js";
 
 export type SecurityLanguage = "typescript" | "python" | "php" | "dart" | "yaml" | "dockerfile" | "unknown";
 export type SecuritySeverity = "low" | "medium" | "high";
-export type SecuritySource = "environment" | "request" | "secret" | "exception" | "user-input" | "sensitive-value";
-export type SecuritySink = "logger" | "url" | "response" | "storage" | "deployment" | "sql" | "html" | "command" | "deserialization" | "file" | "http-client";
+export type SecuritySource = "environment" | "request" | "secret" | "exception" | "user-input" | "sensitive-value" | "dependency";
+export type SecuritySink = "logger" | "url" | "response" | "storage" | "deployment" | "sql" | "html" | "command" | "deserialization" | "file" | "http-client" | "package";
 export type SecurityFindingCategory = "security-flow" | "general-vulnerability";
 export type SecurityScanMode = "all" | SecurityFindingCategory;
 
@@ -35,6 +35,10 @@ export type SecurityFinding = {
   suppressionOwner?: string;
   suppressionExpired?: boolean;
   baseline?: boolean;
+  dependencyName?: string;
+  advisoryId?: string;
+  affectedRange?: string;
+  fixedVersion?: string;
 };
 
 export type SecurityAnalysisIssue = {
@@ -703,11 +707,11 @@ function containsCredentialQuery(line: string): boolean {
 }
 
 function formatSource(source: SecuritySource): string {
-  return { environment: "環境変数", request: "リクエスト入力", secret: "Secret", exception: "例外情報", "user-input": "ユーザー入力", "sensitive-value": "機密値" }[source];
+  return { environment: "環境変数", request: "リクエスト入力", secret: "Secret", exception: "例外情報", "user-input": "ユーザー入力", "sensitive-value": "機密値", dependency: "依存パッケージ" }[source];
 }
 
 function formatSink(sink: SecuritySink): string {
-  return { logger: "ログ", url: "URL", response: "レスポンス", storage: "ストレージ", deployment: "デプロイ設定", sql: "SQL実行", html: "HTML/DOM", command: "コマンド実行", deserialization: "デシリアライズ", file: "ファイル操作", "http-client": "HTTP接続" }[sink];
+  return { logger: "ログ", url: "URL", response: "レスポンス", storage: "ストレージ", deployment: "デプロイ設定", sql: "SQL実行", html: "HTML/DOM", command: "コマンド実行", deserialization: "デシリアライズ", file: "ファイル操作", "http-client": "HTTP接続", package: "依存パッケージ" }[sink];
 }
 
 function remediationForSink(sink: SecuritySink): string {
@@ -723,6 +727,7 @@ function remediationForSink(sink: SecuritySink): string {
     deserialization: "安全な形式へ変更し、型・スキーマ検証を行ってください。",
     file: "実パスを検証し、許可ディレクトリ配下に正規化して制限してください。",
     "http-client": "許可リスト、URLスキーム検証、プライベートネットワーク遮断を実装してください。",
+    package: "依存パッケージを修正版へ更新し、必要に応じて脆弱性をbaselineで管理してください。",
   }[sink];
 }
 
