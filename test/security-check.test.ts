@@ -130,6 +130,21 @@ describe("security flow scan", () => {
     expect(findings[0].filePath).toBe("src/auth.ts");
   });
 
+  it("separates test, e2e, and coverage artifacts from production code", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "devguard-security-scope-"));
+    for (const directory of ["tests", "e2e", "htmlcov", ".nyc_output"]) {
+      await mkdir(path.join(root, directory), { recursive: true });
+      await writeFile(path.join(root, directory, "fixture.py"), "subprocess.run(user_command, shell=True)\n");
+    }
+    await mkdir(path.join(root, "app"), { recursive: true });
+    await writeFile(path.join(root, "app", "runtime.py"), "subprocess.run(user_command, shell=True)\n");
+
+    const findings = await scanRepository(root);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].filePath).toBe("app/runtime.py");
+  });
+
   it("detects GitHub Actions secrets flowing into deployment environment values", () => {
     const findings = scanText(
       ".github/workflows/deploy.yml",

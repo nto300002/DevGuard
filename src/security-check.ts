@@ -80,7 +80,7 @@ export function applySecurityBaseline(findings: SecurityFinding[], baselineIds: 
 const IGNORED_DIRECTORIES = new Set([
   ".git", ".idea", ".vscode",
   // TypeScript / JavaScript
-  "node_modules", "bower_components", "dist", "build", ".next", "coverage",
+  "node_modules", "bower_components", "dist", "build", ".next", "coverage", "htmlcov", ".nyc_output", "test", "tests", "e2e",
   // Python
   ".venv", "venv", "env", "ENV", ".tox", ".nox", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
   // PHP
