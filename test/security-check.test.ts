@@ -33,6 +33,19 @@ describe("security flow scan", () => {
     expect(findings[0]).not.toHaveProperty("executionContext");
   });
 
+  it("integrates server-side browser API AST findings into the security scan", () => {
+    const findings = scanText("app/dashboard/page.tsx", '"use server";\nwindow.document.body;\n', "typescript");
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "next-server-browser-api",
+        category: "general-vulnerability",
+        severity: "medium",
+        lineNumber: 2,
+      }),
+    ]);
+  });
+
   it("detects browser-only APIs and dangerouslySetInnerHTML from a Next.js AST", () => {
     const result = analyzeNextModuleAst(
       "app/dashboard/page.tsx",

@@ -9,8 +9,8 @@ import type { DiffLine } from "./git-diff.js";
 
 export type SecurityLanguage = "typescript" | "python" | "php" | "dart" | "yaml" | "dockerfile" | "unknown";
 export type SecuritySeverity = "low" | "medium" | "high";
-export type SecuritySource = "environment" | "request" | "secret" | "exception" | "user-input" | "sensitive-value";
-export type SecuritySink = "logger" | "url" | "response" | "storage" | "deployment" | "sql" | "html" | "command" | "deserialization" | "file" | "http-client";
+export type SecuritySource = "environment" | "request" | "secret" | "exception" | "user-input" | "sensitive-value" | "browser-api";
+export type SecuritySink = "logger" | "url" | "response" | "storage" | "deployment" | "sql" | "html" | "command" | "deserialization" | "file" | "http-client" | "runtime";
 export type SecurityFindingCategory = "security-flow" | "general-vulnerability";
 export type SecurityScanMode = "all" | SecurityFindingCategory;
 export type NextExecutionContext = "client" | "server" | "route-handler" | "unknown";
@@ -571,6 +571,26 @@ function scanTypeScriptAstDetailed(filePath: string, content: string, astEnabled
   };
 
   visit(sourceFile);
+  if (moduleContext && (moduleContext.executionContext === "server" || moduleContext.executionContext === "route-handler")) {
+    const nextAst = analyzeNextModuleAst(filePath, content);
+    for (const usage of nextAst.browserOnlyUsages) {
+      findings.push(createFinding({
+        filePath,
+        lineNumber: usage.lineNumber,
+        language: "typescript",
+        category: "general-vulnerability",
+        ruleId: "next-server-browser-api",
+        severity: "medium",
+        confidence: "high",
+        source: "browser-api",
+        sink: "runtime",
+        flow: `server module -> ${usage.name}`,
+        message: `Server側モジュールでブラウザ専用API（${usage.name}）を使用しています。`,
+        remediation: "ブラウザ専用APIはClient Componentへ移動するか、サーバー実行時に呼ばれない構成へ分離してください。",
+        executionContext: moduleContext.executionContext,
+      }));
+    }
+  }
   return { findings: dedupeFindings(findings), analysisIssues: [] };
 }
 
@@ -893,11 +913,11 @@ function containsCredentialQuery(line: string): boolean {
 }
 
 function formatSource(source: SecuritySource): string {
-  return { environment: "環境変数", request: "リクエスト入力", secret: "Secret", exception: "例外情報", "user-input": "ユーザー入力", "sensitive-value": "機密値" }[source];
+  return { environment: "環境変数", request: "リクエスト入力", secret: "Secret", exception: "例外情報", "user-input": "ユーザー入力", "sensitive-value": "機密値", "browser-api": "ブラウザAPI" }[source];
 }
 
 function formatSink(sink: SecuritySink): string {
-  return { logger: "ログ", url: "URL", response: "レスポンス", storage: "ストレージ", deployment: "デプロイ設定", sql: "SQL実行", html: "HTML/DOM", command: "コマンド実行", deserialization: "デシリアライズ", file: "ファイル操作", "http-client": "HTTP接続" }[sink];
+  return { logger: "ログ", url: "URL", response: "レスポンス", storage: "ストレージ", deployment: "デプロイ設定", sql: "SQL実行", html: "HTML/DOM", command: "コマンド実行", deserialization: "デシリアライズ", file: "ファイル操作", "http-client": "HTTP接続", runtime: "実行環境" }[sink];
 }
 
 function remediationForSink(sink: SecuritySink): string {
@@ -913,6 +933,7 @@ function remediationForSink(sink: SecuritySink): string {
     deserialization: "安全な形式へ変更し、型・スキーマ検証を行ってください。",
     file: "実パスを検証し、許可ディレクトリ配下に正規化して制限してください。",
     "http-client": "許可リスト、URLスキーム検証、プライベートネットワーク遮断を実装してください。",
+    runtime: "ブラウザ専用APIはClient Componentへ移動するか、サーバー実行時に呼ばれない構成へ分離してください。",
   }[sink];
 }
 
