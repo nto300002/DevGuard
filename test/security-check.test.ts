@@ -2,9 +2,24 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, classifySecurityBaseline, fingerprintFinding, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
 
 describe("security flow scan", () => {
+  it("keeps a finding fingerprint stable when its path and line move", () => {
+    const first = scanText("src/auth.ts", "const key = process.env.API_KEY;\nlogger.error(key);\n", "typescript")[0];
+    const moved = { ...first, filePath: "lib/security/auth.ts", lineNumber: 42 };
+
+    expect(fingerprintFinding(first)).toBe(fingerprintFinding(moved));
+  });
+
+  it("classifies baseline findings as new, ongoing, or resolved", () => {
+    const current = scanText("src/auth.ts", "const key = process.env.API_KEY;\nlogger.error(key);\n", "typescript");
+    const result = classifySecurityBaseline(current, new Set(["legacy-finding"]));
+
+    expect(result.current[0]).toMatchObject({ status: "new" });
+    expect(result.resolved).toEqual(["legacy-finding"]);
+  });
+
   it("detects TypeScript environment values flowing into logs", () => {
     const findings = scanText("lib/auth.ts", "const key = process.env.API_KEY;\nlogger.error(key);\n", "typescript");
 

@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import phpParser from "php-parser";
 import ts from "typescript";
@@ -35,6 +36,7 @@ export type SecurityFinding = {
   suppressionOwner?: string;
   suppressionExpired?: boolean;
   baseline?: boolean;
+  fingerprint?: string;
 };
 
 export type SecurityAnalysisIssue = {
@@ -72,7 +74,28 @@ export async function loadSecurityBaseline(root: string, baselinePath: string | 
 }
 
 export function applySecurityBaseline(findings: SecurityFinding[], baselineIds: ReadonlySet<string>): SecurityFinding[] {
-  return findings.map((finding) => baselineIds.has(finding.id) ? { ...finding, suppressed: true, suppressionReason: "baseline", baseline: true } : finding);
+  return findings.map((finding) => baselineIds.has(finding.id) || baselineIds.has(fingerprintFinding(finding)) ? { ...finding, suppressed: true, suppressionReason: "baseline", baseline: true } : finding);
+}
+
+export type SecurityBaselineStatus = "new" | "ongoing";
+
+export function fingerprintFinding(finding: Pick<SecurityFinding, "ruleId" | "language" | "source" | "sink" | "flow">): string {
+  const stable = [finding.ruleId, finding.language, finding.source, finding.sink, finding.flow.replace(/\s+/g, " ").trim()].join("|");
+  return `fp:${createHash("sha256").update(stable).digest("hex").slice(0, 16)}`;
+}
+
+export function classifySecurityBaseline(findings: SecurityFinding[], baselineIds: ReadonlySet<string>): {
+  current: Array<{ finding: SecurityFinding; status: SecurityBaselineStatus }>;
+  resolved: string[];
+} {
+  const currentKeys = new Set(findings.flatMap((finding) => [finding.id, fingerprintFinding(finding)]));
+  return {
+    current: findings.map((finding) => ({
+      finding,
+      status: baselineIds.has(finding.id) || baselineIds.has(fingerprintFinding(finding)) ? "ongoing" : "new",
+    })),
+    resolved: [...baselineIds].filter((baselineId) => !currentKeys.has(baselineId)),
+  };
 }
 
 // Dependency, virtual-environment, cache, and build directories are not application source.
@@ -672,12 +695,13 @@ function deploymentFinding(filePath: string, lineNumber: number, flow: string): 
 }
 
 function createFinding(input: Omit<SecurityFinding, "id" | "confidence" | "category"> & { confidence?: SecurityFinding["confidence"]; category?: SecurityFindingCategory }): SecurityFinding {
-  return {
+  const finding = {
     ...input,
     id: `${input.ruleId}:${input.filePath}:${input.lineNumber}`,
     confidence: input.confidence ?? "medium",
     category: input.category ?? "security-flow",
   };
+  return { ...finding, fingerprint: input.fingerprint ?? fingerprintFinding(finding) };
 }
 
 function extractAssignedVariables(line: string): string[] {
