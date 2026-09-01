@@ -29,7 +29,7 @@ The implementation should favor simple, deterministic analysis for the MVP. Secu
 
 ## 2. Command Design
 
-### `devguard doctor`
+### `safecheck doctor`
 
 Responsibilities:
 
@@ -46,7 +46,7 @@ Failure behavior:
 - Git management outside a work tree should be a controlled error.
 - Internal Git command failures should return exit code `2`.
 
-### `devguard init`
+### `safecheck init`
 
 Responsibilities:
 
@@ -54,7 +54,7 @@ Responsibilities:
 - Refuse silent overwrite if the file already exists.
 - Use the default config template from the requirements.
 
-### `devguard check --staged`
+### `safecheck check --staged`
 
 Responsibilities:
 
@@ -70,7 +70,7 @@ Responsibilities:
 - Generate commit split suggestions.
 - Evaluate risk and return the correct exit code.
 
-### `devguard check --staged-diff`
+### `safecheck check --staged-diff`
 
 Responsibilities:
 
@@ -84,7 +84,7 @@ Responsibilities:
 - Warn in Japanese when the staged diff reaches 6 files or 151 changed lines.
 - Strongly recommend splitting in Japanese when the staged diff reaches 11 files or 301 changed lines.
 
-### `devguard check --worktree-diff`
+### `safecheck check --worktree-diff`
 
 Responsibilities:
 
@@ -94,7 +94,7 @@ Responsibilities:
 - Treat readable untracked text files as added lines.
 - Print edited files and diff size guidance.
 
-### `devguard check --all-diff`
+### `safecheck check --all-diff`
 
 Responsibilities:
 
@@ -104,7 +104,7 @@ Responsibilities:
 - Treat readable untracked text files as added lines.
 - Print edited files and diff size guidance.
 
-### `devguard push-check`
+### `safecheck push-check`
 
 Responsibilities:
 
@@ -117,7 +117,7 @@ Responsibilities:
 - Generate AI-agent confirmation block when enabled.
 - Evaluate push allow/block state.
 
-### `devguard install-hooks`
+### `safecheck install-hooks`
 
 Responsibilities:
 
@@ -127,10 +127,10 @@ Responsibilities:
 - Resolve the hook directory with `git rev-parse --git-path hooks`.
 - Support submodule and worktree hook locations where `.git` may be a file or an indirection.
 - When `--include-submodules` is provided, enumerate initialized recursive submodules and install hooks into each repository.
-- Use `npx --yes --package=@nto300002/devguard devguard check --staged` for `pre-commit`.
-- Use `npx --yes --package=@nto300002/devguard devguard push-check --agent-block` for `pre-push`.
+- Use `npx --yes --package=agent-safecheck safecheck check --staged` for `pre-commit`.
+- Use `npx --yes --package=agent-safecheck safecheck push-check --agent-block` for `pre-push`.
 
-### `devguard security-check`
+### `safecheck security-check`
 
 `security-check` scans the repository and supports `--mode all`, `--mode security-flow`, and `--mode general`. The default is `all` for backward compatibility. General vulnerability rules produce candidate findings with `category`, `cwe`, `owaspCategory`, `confidence`, and remediation information; they do not claim that a vulnerability is confirmed.
 
@@ -504,7 +504,7 @@ The MVP does not fetch GitHub Issue bodies.
 
 Scope is determined by:
 
-- `devguard push-check --scope <scope>`
+- `safecheck push-check --scope <scope>`
 - `.devguard.yml` `issueScope.allowedScopes`
 
 Push blockers:
@@ -833,7 +833,7 @@ Every GitHub issue should include an acceptance checklist that can be verified b
 - `normalizePath()`
 - `toRootRelativePath()`
 - `resolveConfigPath()`
-- `devguard doctor`
+- `safecheck doctor`
 
 ### Phase 2: Diff Acquisition
 
@@ -861,7 +861,7 @@ Every GitHub issue should include an acceptance checklist that can be verified b
 - `generateChecklist()`
 - `detectRisk()`
 - `suggestCommitPlan()`
-- CLI output for `devguard check --staged`
+- CLI output for `safecheck check --staged`
 
 ### Phase 5: `push-check`
 
@@ -870,7 +870,7 @@ Every GitHub issue should include an acceptance checklist that can be verified b
 - strict log aggregation
 - todo generation
 - agent block generation
-- CLI output for `devguard push-check`
+- CLI output for `safecheck push-check`
 
 ### Phase 6: Hook Installation
 

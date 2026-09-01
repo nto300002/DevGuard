@@ -2,9 +2,13 @@ import packageJson from "../package.json" with { type: "json" };
 import { describe, expect, it } from "vitest";
 
 describe("package metadata", () => {
-  it("exposes the devguard CLI command", () => {
+  it("uses the unscoped AI security package name", () => {
+    expect(packageJson.name).toBe("agent-safecheck");
+  });
+
+  it("exposes the safecheck CLI command", () => {
     expect(packageJson.bin).toEqual({
-      devguard: "dist/cli.js",
+      safecheck: "dist/cli.js",
     });
   });
 
