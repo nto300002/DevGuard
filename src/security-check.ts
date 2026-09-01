@@ -9,10 +9,39 @@ import type { DiffLine } from "./git-diff.js";
 
 export type SecurityLanguage = "typescript" | "python" | "php" | "dart" | "yaml" | "dockerfile" | "unknown";
 export type SecuritySeverity = "low" | "medium" | "high";
-export type SecuritySource = "environment" | "request" | "secret" | "exception" | "user-input" | "sensitive-value";
-export type SecuritySink = "logger" | "url" | "response" | "storage" | "deployment" | "sql" | "html" | "command" | "deserialization" | "file" | "http-client";
+export type SecuritySource = "environment" | "request" | "secret" | "exception" | "user-input" | "sensitive-value" | "browser-api";
+export type SecuritySink = "logger" | "url" | "response" | "storage" | "deployment" | "sql" | "html" | "command" | "deserialization" | "file" | "http-client" | "runtime";
 export type SecurityFindingCategory = "security-flow" | "general-vulnerability";
 export type SecurityScanMode = "all" | SecurityFindingCategory;
+export type NextExecutionContext = "client" | "server" | "route-handler" | "unknown";
+
+export type NextModuleContext = {
+  executionContext: NextExecutionContext;
+  isRouteHandler: boolean;
+  directives: string[];
+};
+
+export type NextBrowserOnlyUsage = {
+  name: "window" | "document" | "localStorage" | "sessionStorage";
+  lineNumber: number;
+};
+
+export type NextModuleAstAnalysis = {
+  executionContext: NextExecutionContext;
+  browserOnlyUsages: NextBrowserOnlyUsage[];
+  dangerouslySetInnerHTML: Array<{ lineNumber: number }>;
+};
+
+export type NextModuleGraphAnalysis = {
+  modules: Array<{ filePath: string; executionContext: NextExecutionContext }>;
+  boundaries: Array<{
+    from: string;
+    to: string;
+    fromContext: NextExecutionContext;
+    toContext: NextExecutionContext;
+  }>;
+  unresolvedImports: Array<{ from: string; specifier: string }>;
+};
 
 export type SecurityFinding = {
   id: string;
@@ -28,6 +57,7 @@ export type SecurityFinding = {
   message: string;
   remediation: string;
   category: SecurityFindingCategory;
+  executionContext?: NextExecutionContext;
   cwe?: string;
   owaspCategory?: string;
   suppressed?: boolean;
@@ -51,10 +81,168 @@ export type SecurityScanTextResult = {
 
 export type SecurityRepositoryScanOptions = {
   excludePaths?: readonly string[];
+  astEnabled?: boolean;
 };
 
 export function filterSecurityFindingsByMode(findings: SecurityFinding[], mode: SecurityScanMode): SecurityFinding[] {
   return mode === "all" ? findings : findings.filter((finding) => finding.category === mode);
+}
+
+export function detectNextModuleContext(filePath: string, content: string): NextModuleContext {
+  const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, scriptKindForPath(filePath));
+  const directives = sourceFile.statements
+    .filter((statement): statement is ts.ExpressionStatement => ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression))
+    .map((statement) => (statement.expression as ts.StringLiteral).text);
+  const normalizedPath = filePath.replaceAll("\\", "/");
+  const isRouteHandler = /(?:^|\/)app\/(?:.*\/)?route\.(?:js|jsx|ts|tsx)$/i.test(normalizedPath);
+
+  if (isRouteHandler) return { executionContext: "route-handler", isRouteHandler, directives };
+  if (directives.includes("use client")) return { executionContext: "client", isRouteHandler, directives };
+  if (directives.includes("use server")) return { executionContext: "server", isRouteHandler, directives };
+  return { executionContext: "unknown", isRouteHandler, directives };
+}
+
+export function analyzeNextModuleAst(filePath: string, content: string): NextModuleAstAnalysis {
+  const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, scriptKindForPath(filePath));
+  const moduleContext = detectNextModuleContext(filePath, content);
+  const browserOnlyUsages: NextBrowserOnlyUsage[] = [];
+  const dangerouslySetInnerHTML: Array<{ lineNumber: number }> = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && isNextBrowserGlobal(node.text) && isTypeScriptReference(node)) {
+      browserOnlyUsages.push({
+        name: node.text,
+        lineNumber: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
+      });
+    }
+
+    if (ts.isJsxAttribute(node) && ts.isIdentifier(node.name) && node.name.text === "dangerouslySetInnerHTML") {
+      dangerouslySetInnerHTML.push({
+        lineNumber: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
+      });
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+  return {
+    executionContext: moduleContext.executionContext,
+    browserOnlyUsages: dedupeNextBrowserOnlyUsages(browserOnlyUsages),
+    dangerouslySetInnerHTML: dedupeNextLines(dangerouslySetInnerHTML),
+  };
+}
+
+export function analyzeNextModuleGraph(entryFilePath: string, files: Readonly<Record<string, string>>): NextModuleGraphAnalysis {
+  const normalizedFiles = new Map(Object.entries(files).map(([filePath, content]) => [normalizeNextPath(filePath), content]));
+  const modules: NextModuleGraphAnalysis["modules"] = [];
+  const boundaries: NextModuleGraphAnalysis["boundaries"] = [];
+  const unresolvedImports: NextModuleGraphAnalysis["unresolvedImports"] = [];
+  const visited = new Set<string>();
+  const unresolved = new Set<string>();
+
+  const visit = (filePath: string): void => {
+    const normalizedFilePath = normalizeNextPath(filePath);
+    if (visited.has(normalizedFilePath)) return;
+    const content = normalizedFiles.get(normalizedFilePath);
+    if (content === undefined) return;
+    visited.add(normalizedFilePath);
+    const fromContext = detectNextModuleContext(normalizedFilePath, content).executionContext;
+    modules.push({ filePath: normalizedFilePath, executionContext: fromContext });
+
+    const sourceFile = ts.createSourceFile(normalizedFilePath, content, ts.ScriptTarget.Latest, true, scriptKindForPath(normalizedFilePath));
+    for (const specifier of nextImportSpecifiers(sourceFile)) {
+      if (!specifier.startsWith(".")) continue;
+      const resolved = resolveNextImport(normalizedFilePath, specifier, normalizedFiles);
+      if (resolved) {
+        const targetContent = normalizedFiles.get(resolved);
+        const toContext = targetContent === undefined ? "unknown" : detectNextModuleContext(resolved, targetContent).executionContext;
+        if (fromContext === "client" && (toContext === "server" || toContext === "route-handler")) {
+          boundaries.push({ from: normalizedFilePath, to: resolved, fromContext, toContext });
+        }
+        visit(resolved);
+      } else {
+        const key = `${normalizedFilePath}:${specifier}`;
+        if (!unresolved.has(key)) {
+          unresolved.add(key);
+          unresolvedImports.push({ from: normalizedFilePath, specifier });
+        }
+      }
+    }
+  };
+
+  visit(entryFilePath);
+  return { modules, boundaries: dedupeNextBoundaries(boundaries), unresolvedImports };
+}
+
+function dedupeNextBoundaries(boundaries: NextModuleGraphAnalysis["boundaries"]): NextModuleGraphAnalysis["boundaries"] {
+  const seen = new Set<string>();
+  return boundaries.filter((boundary) => {
+    const key = `${boundary.from}:${boundary.to}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function nextImportSpecifiers(sourceFile: ts.SourceFile): string[] {
+  const specifiers: string[] = [];
+  const add = (node: ts.StringLiteralLike | undefined): void => {
+    if (node) specifiers.push(node.text);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node)) add(ts.isStringLiteral(node.moduleSpecifier) ? node.moduleSpecifier : undefined);
+    if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) add(node.moduleSpecifier);
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments.length === 1) {
+      const argument = node.arguments[0];
+      if (argument && ts.isStringLiteral(argument)) add(argument);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return [...new Set(specifiers)];
+}
+
+function resolveNextImport(fromFilePath: string, specifier: string, files: ReadonlyMap<string, string>): string | undefined {
+  const basePath = normalizeNextPath(path.posix.join(path.posix.dirname(fromFilePath), specifier));
+  const candidates = /\.[a-z]+$/i.test(basePath)
+    ? [basePath]
+    : [basePath, `${basePath}.ts`, `${basePath}.tsx`, `${basePath}.js`, `${basePath}.jsx`, `${basePath}/index.ts`, `${basePath}/index.tsx`, `${basePath}/index.js`, `${basePath}/index.jsx`];
+  return candidates.find((candidate) => files.has(candidate));
+}
+
+function normalizeNextPath(filePath: string): string {
+  return path.posix.normalize(filePath.replaceAll("\\", "/")).replace(/^\.\//, "");
+}
+
+function isNextBrowserGlobal(name: string): name is NextBrowserOnlyUsage["name"] {
+  return name === "window" || name === "document" || name === "localStorage" || name === "sessionStorage";
+}
+
+function isTypeScriptReference(node: ts.Identifier): boolean {
+  const parent = node.parent;
+  if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
+  if (ts.isPropertyAssignment(parent) && parent.name === node) return false;
+  if (ts.isVariableDeclaration(parent) && parent.name === node) return false;
+  return true;
+}
+
+function dedupeNextBrowserOnlyUsages(usages: NextBrowserOnlyUsage[]): NextBrowserOnlyUsage[] {
+  const seen = new Set<string>();
+  return usages.filter((usage) => {
+    const key = `${usage.name}:${usage.lineNumber}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function dedupeNextLines(lines: Array<{ lineNumber: number }>): Array<{ lineNumber: number }> {
+  const seen = new Set<number>();
+  return lines.filter((line) => {
+    if (seen.has(line.lineNumber)) return false;
+    seen.add(line.lineNumber);
+    return true;
+  });
 }
 
 export async function loadSecurityBaseline(root: string, baselinePath: string | null): Promise<Set<string>> {
@@ -119,7 +307,7 @@ export async function scanRepositoryDetailed(root: string, options: SecurityRepo
     const content = await readFile(filePath, "utf8");
     const relativePath = normalizePath(path.relative(root, filePath));
     if ((options.excludePaths ?? []).some((pattern) => matchesPath(pattern, relativePath))) continue;
-    const result = scanTextDetailed(relativePath, content, languageForPath(relativePath));
+    const result = scanTextDetailed(relativePath, content, languageForPath(relativePath), options.astEnabled ?? true);
     findings.push(...result.findings);
     analysisIssues.push(...result.analysisIssues);
   }
@@ -146,13 +334,13 @@ export function applySecurityAllowlist(findings: SecurityFinding[], entries: rea
   });
 }
 
-export function scanText(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath)): SecurityFinding[] {
-  return scanTextDetailed(filePath, content, language).findings;
+export function scanText(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath), astEnabled = true): SecurityFinding[] {
+  return scanTextDetailed(filePath, content, language, astEnabled).findings;
 }
 
-export function scanTextDetailed(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath)): SecurityScanTextResult {
+export function scanTextDetailed(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath), astEnabled = true): SecurityScanTextResult {
   if (language === "typescript") {
-    return addGeneralFindings(scanTypeScriptAstDetailed(filePath, content), filePath, content, language);
+    return addGeneralFindings(scanTypeScriptAstDetailed(filePath, content, astEnabled), filePath, content, language);
   }
   if (language === "python") {
     return addGeneralFindings(scanPythonAstDetailed(filePath, content), filePath, content, language);
@@ -340,7 +528,7 @@ function scanTypeScriptAst(filePath: string, content: string): SecurityFinding[]
   return scanTypeScriptAstDetailed(filePath, content).findings;
 }
 
-function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityScanTextResult {
+function scanTypeScriptAstDetailed(filePath: string, content: string, astEnabled = true): SecurityScanTextResult {
   const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, scriptKindForPath(filePath));
   const diagnostics = (sourceFile as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [];
   if (diagnostics.length > 0) {
@@ -349,6 +537,7 @@ function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityS
       analysisIssues: [{ filePath, language: "typescript", kind: "parse-error", message: formatDiagnostic(diagnostics[0]) }],
     };
   }
+  const moduleContext = astEnabled ? detectNextModuleContext(filePath, content) : undefined;
   const tainted = new Map<string, SecuritySource>();
   const findings: SecurityFinding[] = [];
 
@@ -376,6 +565,7 @@ function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityS
           flow: `${source} -> ${sink}`,
           message: `${formatSource(source)}が${formatSink(sink)}へ流入する可能性があります。`,
           remediation: remediationForSink(sink),
+          ...(moduleContext ? { executionContext: moduleContext.executionContext } : {}),
         }));
       }
     }
@@ -384,6 +574,47 @@ function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityS
   };
 
   visit(sourceFile);
+  const nextAst = moduleContext ? analyzeNextModuleAst(filePath, content) : undefined;
+  if (nextAst && (nextAst.executionContext === "server" || nextAst.executionContext === "route-handler")) {
+    for (const usage of nextAst.browserOnlyUsages) {
+      findings.push(createFinding({
+        filePath,
+        lineNumber: usage.lineNumber,
+        language: "typescript",
+        category: "general-vulnerability",
+        ruleId: "next-server-browser-api",
+        severity: "medium",
+        confidence: "high",
+        source: "browser-api",
+        sink: "runtime",
+        flow: `server module -> ${usage.name}`,
+        message: `Server側モジュールでブラウザ専用API（${usage.name}）を使用しています。`,
+        remediation: "ブラウザ専用APIはClient Componentへ移動するか、サーバー実行時に呼ばれない構成へ分離してください。",
+        executionContext: nextAst.executionContext,
+      }));
+    }
+  }
+  if (nextAst) {
+    for (const usage of nextAst.dangerouslySetInnerHTML) {
+      findings.push(createFinding({
+        filePath,
+        lineNumber: usage.lineNumber,
+        language: "typescript",
+        category: "general-vulnerability",
+        ruleId: "general-xss",
+        severity: "high",
+        confidence: "high",
+        source: "user-input",
+        sink: "html",
+        flow: "external input -> html",
+        cwe: "CWE-79",
+        owaspCategory: "A03:2021-Injection",
+        message: "JSXのdangerouslySetInnerHTMLへ未検証の値が挿入される可能性があります。",
+        remediation: "出力エスケープまたは安全なHTMLサニタイズを使用してください。",
+        executionContext: nextAst.executionContext,
+      }));
+    }
+  }
   return { findings: dedupeFindings(findings), analysisIssues: [] };
 }
 
@@ -706,11 +937,11 @@ function containsCredentialQuery(line: string): boolean {
 }
 
 function formatSource(source: SecuritySource): string {
-  return { environment: "環境変数", request: "リクエスト入力", secret: "Secret", exception: "例外情報", "user-input": "ユーザー入力", "sensitive-value": "機密値" }[source];
+  return { environment: "環境変数", request: "リクエスト入力", secret: "Secret", exception: "例外情報", "user-input": "ユーザー入力", "sensitive-value": "機密値", "browser-api": "ブラウザAPI" }[source];
 }
 
 function formatSink(sink: SecuritySink): string {
-  return { logger: "ログ", url: "URL", response: "レスポンス", storage: "ストレージ", deployment: "デプロイ設定", sql: "SQL実行", html: "HTML/DOM", command: "コマンド実行", deserialization: "デシリアライズ", file: "ファイル操作", "http-client": "HTTP接続" }[sink];
+  return { logger: "ログ", url: "URL", response: "レスポンス", storage: "ストレージ", deployment: "デプロイ設定", sql: "SQL実行", html: "HTML/DOM", command: "コマンド実行", deserialization: "デシリアライズ", file: "ファイル操作", "http-client": "HTTP接続", runtime: "実行環境" }[sink];
 }
 
 function remediationForSink(sink: SecuritySink): string {
@@ -726,6 +957,7 @@ function remediationForSink(sink: SecuritySink): string {
     deserialization: "安全な形式へ変更し、型・スキーマ検証を行ってください。",
     file: "実パスを検証し、許可ディレクトリ配下に正規化して制限してください。",
     "http-client": "許可リスト、URLスキーム検証、プライベートネットワーク遮断を実装してください。",
+    runtime: "ブラウザ専用APIはClient Componentへ移動するか、サーバー実行時に呼ばれない構成へ分離してください。",
   }[sink];
 }
 

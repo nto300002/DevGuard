@@ -2,9 +2,116 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
+import { analyzeNextModuleAst, analyzeNextModuleGraph, applySecurityAllowlist, applySecurityBaseline, detectNextModuleContext, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
 
 describe("security flow scan", () => {
+  it("detects Next.js client and route-handler execution contexts from module directives and paths", () => {
+    expect(detectNextModuleContext("app/dashboard/page.tsx", '"use client";\nexport default function Page() {}')).toEqual({
+      executionContext: "client",
+      isRouteHandler: false,
+      directives: ["use client"],
+    });
+    expect(detectNextModuleContext("app/api/users/route.ts", '"use server";\nexport async function GET() {}')).toEqual({
+      executionContext: "route-handler",
+      isRouteHandler: true,
+      directives: ["use server"],
+    });
+  });
+
+  it("attaches the Next.js execution context to TypeScript findings", () => {
+    const findings = scanText("app/dashboard/page.tsx", '"use client";\nconst key = process.env.API_KEY;\nlogger.error(key);\n', "typescript");
+
+    expect(findings).toEqual([
+      expect.objectContaining({ executionContext: "client", lineNumber: 3 }),
+    ]);
+  });
+
+  it("can disable Next.js AST context analysis while retaining the security flow scan", () => {
+    const findings = scanText("app/dashboard/page.tsx", '"use client";\nconst key = process.env.API_KEY;\nlogger.error(key);\n', "typescript", false);
+
+    expect(findings).toEqual([expect.objectContaining({ ruleId: "secret-to-log" })]);
+    expect(findings[0]).not.toHaveProperty("executionContext");
+  });
+
+  it("integrates server-side browser API AST findings into the security scan", () => {
+    const findings = scanText("app/dashboard/page.tsx", '"use server";\nwindow.document.body;\n', "typescript");
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "next-server-browser-api",
+        category: "general-vulnerability",
+        severity: "medium",
+        lineNumber: 2,
+      }),
+    ]);
+  });
+
+  it("integrates dangerouslySetInnerHTML AST findings with the module context", () => {
+    const findings = scanText("app/page.tsx", '"use client";\nreturn <div dangerouslySetInnerHTML={{ __html: html }} />;\n', "typescript");
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "general-xss",
+        executionContext: "client",
+        confidence: "high",
+        lineNumber: 2,
+      }),
+    ]);
+  });
+
+  it("detects browser-only APIs and dangerouslySetInnerHTML from a Next.js AST", () => {
+    const result = analyzeNextModuleAst(
+      "app/dashboard/page.tsx",
+      '"use server";\nwindow;\nlocalStorage.setItem("x", "value");\nreturn <div dangerouslySetInnerHTML={{ __html: html }} />;\n',
+    );
+
+    expect(result.executionContext).toBe("server");
+    expect(result.browserOnlyUsages).toEqual([
+      { name: "window", lineNumber: 2 },
+      { name: "localStorage", lineNumber: 3 },
+    ]);
+    expect(result.dangerouslySetInnerHTML).toEqual([{ lineNumber: 4 }]);
+  });
+
+  it("does not detect Next.js AST patterns inside strings or comments", () => {
+    const result = analyzeNextModuleAst(
+      "app/page.tsx",
+      'const text = "window localStorage dangerouslySetInnerHTML";\n// document sessionStorage\nexport default function Page() { return <div />; }\n',
+    );
+
+    expect(result.browserOnlyUsages).toEqual([]);
+    expect(result.dangerouslySetInnerHTML).toEqual([]);
+  });
+
+  it("follows relative imports and records referenced Next.js module contexts", () => {
+    const result = analyzeNextModuleGraph("app/page.tsx", {
+      "app/page.tsx": '"use client";\nimport Widget from "./components/Widget";\nimport { value } from "../shared/value";\n',
+      "app/components/Widget.tsx": "export default function Widget() { return <button />; }\n",
+      "shared/value.ts": '"use server";\nexport const value = 1;\n',
+    });
+
+    expect(result.modules).toEqual([
+      { filePath: "app/page.tsx", executionContext: "client" },
+      { filePath: "app/components/Widget.tsx", executionContext: "unknown" },
+      { filePath: "shared/value.ts", executionContext: "server" },
+    ]);
+    expect(result.boundaries).toEqual([
+      { from: "app/page.tsx", to: "shared/value.ts", fromContext: "client", toContext: "server" },
+    ]);
+    expect(result.unresolvedImports).toEqual([]);
+  });
+
+  it("does not loop on circular imports and reports unresolved relative imports", () => {
+    const result = analyzeNextModuleGraph("app/page.tsx", {
+      "app/page.tsx": 'import "./a";\nimport "./missing";\n',
+      "app/a.ts": 'import "./page";\n',
+    });
+
+    expect(result.modules.map((module) => module.filePath)).toEqual(["app/page.tsx", "app/a.ts"]);
+    expect(result.boundaries).toEqual([]);
+    expect(result.unresolvedImports).toEqual([{ from: "app/page.tsx", specifier: "./missing" }]);
+  });
+
   it("detects TypeScript environment values flowing into logs", () => {
     const findings = scanText("lib/auth.ts", "const key = process.env.API_KEY;\nlogger.error(key);\n", "typescript");
 

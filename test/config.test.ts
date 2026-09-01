@@ -26,6 +26,7 @@ describe("loadConfig", () => {
     expect(result.configPath).toBe(path.join(gitRoot, ".devguard.yml"));
     expect(result.config.project.defaultBranch).toBe("main");
     expect(result.config.presets.enabled).toEqual(DEFAULT_PRESETS);
+    expect(result.config.securityCheck.astEnabled).toBe(true);
   });
 
   it("loads a valid .devguard.yml and merges defaults", async () => {
@@ -124,6 +125,12 @@ describe("validateConfig", () => {
     });
 
     expect(config.securityCheck.baselinePath).toBe(".devguard-security-baseline.json");
+  });
+
+  it("loads the AST analysis toggle", () => {
+    const config = validateConfig({ securityCheck: { astEnabled: false } });
+
+    expect(config.securityCheck.astEnabled).toBe(false);
   });
 });
 
