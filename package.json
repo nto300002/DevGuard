@@ -1,6 +1,6 @@
 {
   "name": "agent-safecheck",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "AI開発脆弱性予防のためのpre-commit / pre-push self-review CLI.",
   "type": "module",
   "bin": {
