@@ -13,6 +13,13 @@ export type SecuritySource = "environment" | "request" | "secret" | "exception" 
 export type SecuritySink = "logger" | "url" | "response" | "storage" | "deployment" | "sql" | "html" | "command" | "deserialization" | "file" | "http-client";
 export type SecurityFindingCategory = "security-flow" | "general-vulnerability";
 export type SecurityScanMode = "all" | SecurityFindingCategory;
+export type NextExecutionContext = "client" | "server" | "route-handler" | "unknown";
+
+export type NextModuleContext = {
+  executionContext: NextExecutionContext;
+  isRouteHandler: boolean;
+  directives: string[];
+};
 
 export type SecurityFinding = {
   id: string;
@@ -28,6 +35,7 @@ export type SecurityFinding = {
   message: string;
   remediation: string;
   category: SecurityFindingCategory;
+  executionContext?: NextExecutionContext;
   cwe?: string;
   owaspCategory?: string;
   suppressed?: boolean;
@@ -55,6 +63,20 @@ export type SecurityRepositoryScanOptions = {
 
 export function filterSecurityFindingsByMode(findings: SecurityFinding[], mode: SecurityScanMode): SecurityFinding[] {
   return mode === "all" ? findings : findings.filter((finding) => finding.category === mode);
+}
+
+export function detectNextModuleContext(filePath: string, content: string): NextModuleContext {
+  const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, scriptKindForPath(filePath));
+  const directives = sourceFile.statements
+    .filter((statement): statement is ts.ExpressionStatement => ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression))
+    .map((statement) => (statement.expression as ts.StringLiteral).text);
+  const normalizedPath = filePath.replaceAll("\\", "/");
+  const isRouteHandler = /(?:^|\/)app\/(?:.*\/)?route\.(?:js|jsx|ts|tsx)$/i.test(normalizedPath);
+
+  if (isRouteHandler) return { executionContext: "route-handler", isRouteHandler, directives };
+  if (directives.includes("use client")) return { executionContext: "client", isRouteHandler, directives };
+  if (directives.includes("use server")) return { executionContext: "server", isRouteHandler, directives };
+  return { executionContext: "unknown", isRouteHandler, directives };
 }
 
 export async function loadSecurityBaseline(root: string, baselinePath: string | null): Promise<Set<string>> {
@@ -346,6 +368,7 @@ function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityS
       analysisIssues: [{ filePath, language: "typescript", kind: "parse-error", message: formatDiagnostic(diagnostics[0]) }],
     };
   }
+  const moduleContext = detectNextModuleContext(filePath, content);
   const tainted = new Map<string, SecuritySource>();
   const findings: SecurityFinding[] = [];
 
@@ -373,6 +396,7 @@ function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityS
           flow: `${source} -> ${sink}`,
           message: `${formatSource(source)}が${formatSink(sink)}へ流入する可能性があります。`,
           remediation: remediationForSink(sink),
+          executionContext: moduleContext.executionContext,
         }));
       }
     }

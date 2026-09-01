@@ -2,9 +2,30 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, detectNextModuleContext, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
 
 describe("security flow scan", () => {
+  it("detects Next.js client and route-handler execution contexts from module directives and paths", () => {
+    expect(detectNextModuleContext("app/dashboard/page.tsx", '"use client";\nexport default function Page() {}')).toEqual({
+      executionContext: "client",
+      isRouteHandler: false,
+      directives: ["use client"],
+    });
+    expect(detectNextModuleContext("app/api/users/route.ts", '"use server";\nexport async function GET() {}')).toEqual({
+      executionContext: "route-handler",
+      isRouteHandler: true,
+      directives: ["use server"],
+    });
+  });
+
+  it("attaches the Next.js execution context to TypeScript findings", () => {
+    const findings = scanText("app/dashboard/page.tsx", '"use client";\nconst key = process.env.API_KEY;\nlogger.error(key);\n', "typescript");
+
+    expect(findings).toEqual([
+      expect.objectContaining({ executionContext: "client", lineNumber: 3 }),
+    ]);
+  });
+
   it("detects TypeScript environment values flowing into logs", () => {
     const findings = scanText("lib/auth.ts", "const key = process.env.API_KEY;\nlogger.error(key);\n", "typescript");
 
