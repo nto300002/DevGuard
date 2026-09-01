@@ -17,10 +17,10 @@ MVPでは以下に注力します。
 - 任意のサブディレクトリからのGit root検出
 - Git root相対パスへの正規化
 - `.devguard.yml` の読み込みとdefault config
-- `devguard doctor`
-- `devguard check --staged`
-- `devguard security-check`
-- `devguard push-check`
+- `safecheck doctor`
+- `safecheck check --staged`
+- `safecheck security-check`
+- `safecheck push-check`
 - `defaultBranch...HEAD` 差分解析
 - keyword rule
 - 厳しめのdebug log検出
@@ -48,20 +48,20 @@ MVPでは、GitHub OAuth、GitHub Secretsの実在確認、GitHub Issue本文の
 ## コマンド
 
 ```bash
-devguard doctor
-devguard init
-devguard check --staged
-devguard check --staged-diff
-devguard check --worktree-diff
-devguard check --all-diff
-devguard security-check
-devguard security-check --json
-devguard security-check --sarif
-devguard security-check --mode general
-devguard security-check --write-baseline
-devguard push-check
-devguard install-hooks
-devguard install-hooks --include-submodules
+safecheck doctor
+safecheck init
+safecheck check --staged
+safecheck check --staged-diff
+safecheck check --worktree-diff
+safecheck check --all-diff
+safecheck security-check
+safecheck security-check --json
+safecheck security-check --sarif
+safecheck security-check --mode general
+safecheck security-check --write-baseline
+safecheck push-check
+safecheck install-hooks
+safecheck install-hooks --include-submodules
 ```
 
 ## インストール
@@ -69,26 +69,26 @@ devguard install-hooks --include-submodules
 npm公開版をグローバルインストールする場合:
 
 ```bash
-npm install -g @nto300002/devguard
+npm install -g agent-safecheck
 ```
 
 インストール後は `devguard` コマンドを使えます。
 
 ```bash
 devguard --help
-devguard doctor
+safecheck doctor
 ```
 
 一度だけ実行する場合:
 
 ```bash
-npx --yes --package=@nto300002/devguard devguard doctor
-npx --yes --package=@nto300002/devguard devguard check --staged
-npx --yes --package=@nto300002/devguard devguard check --staged-diff
-npx --yes --package=@nto300002/devguard devguard check --worktree-diff
-npx --yes --package=@nto300002/devguard devguard check --all-diff
-npx --yes --package=@nto300002/devguard devguard security-check
-npx --yes --package=@nto300002/devguard devguard security-check --mode general
+npx --yes --package=agent-safecheck safecheck doctor
+npx --yes --package=agent-safecheck safecheck check --staged
+npx --yes --package=agent-safecheck safecheck check --staged-diff
+npx --yes --package=agent-safecheck safecheck check --worktree-diff
+npx --yes --package=agent-safecheck safecheck check --all-diff
+npx --yes --package=agent-safecheck safecheck security-check
+npx --yes --package=agent-safecheck safecheck security-check --mode general
 ```
 
 GitHub Releaseからtarballをダウンロードして導入する場合:
@@ -111,13 +111,13 @@ link後は、ローカル環境で `devguard` コマンドを使えます。
 
 ```bash
 devguard --help
-devguard doctor
+safecheck doctor
 ```
 
 linkを解除する場合:
 
 ```bash
-npm unlink -g @nto300002/devguard
+npm unlink -g agent-safecheck
 ```
 
 ## ローカルでの使い方
@@ -126,25 +126,25 @@ staged差分をcommit前に確認します。
 
 ```bash
 git add <files>
-devguard check --staged
+safecheck check --staged
 ```
 
 staged差分のファイル数・変更行数を強めに意識して確認する場合:
 
 ```bash
-devguard check --staged-diff
+safecheck check --staged-diff
 ```
 
 まだ `git add` していない作業ツリー差分を確認する場合:
 
 ```bash
-devguard check --worktree-diff
+safecheck check --worktree-diff
 ```
 
 staged / unstaged / untracked をまとめて確認する場合:
 
 ```bash
-devguard check --all-diff
+safecheck check --all-diff
 ```
 
 差分確認コマンドの使い分け:
@@ -163,27 +163,27 @@ devguard check --all-diff
 branch全体をpush前に確認します。
 
 ```bash
-devguard push-check --agent-block
+safecheck push-check --agent-block
 ```
 
 現在のリポジトリにGit hookを導入します。
 
 ```bash
-devguard install-hooks
+safecheck install-hooks
 ```
 
 初期化済みサブモジュールにもまとめてGit hookを導入する場合:
 
 ```bash
-devguard install-hooks --include-submodules
+safecheck install-hooks --include-submodules
 ```
 
 サブモジュールやGit worktreeでも正しいhook配置先を使うため、DevGuardは `git rev-parse --git-path hooks` でhookディレクトリを解決します。
 
 導入されるhookは以下を実行します。
 
-- `pre-commit`: `npx --yes --package=@nto300002/devguard devguard check --staged`
-- `pre-push`: `npx --yes --package=@nto300002/devguard devguard push-check --agent-block`
+- `pre-commit`: `npx --yes --package=agent-safecheck safecheck check --staged`
+- `pre-push`: `npx --yes --package=agent-safecheck safecheck push-check --agent-block`
 
 packageを公開せずにローカル開発版でhookを試す場合は、`DEVGUARD_BIN` で実行コマンドを差し替えられます。
 
@@ -196,7 +196,7 @@ DEVGUARD_BIN="node /absolute/path/to/DevGuard/dist/cli.js" git commit -m "test"
 リポジトリ全体を確認する場合は、以下を実行します。
 
 ```bash
-devguard security-check
+safecheck security-check
 ```
 
 検出モードは次の2種類です。
@@ -207,8 +207,8 @@ devguard security-check
 一般脆弱性候補だけを確認する場合は、以下を実行します。検出は脆弱性の確定ではなく、ファイル・行番号・CWE・OWASP分類・confidence・対応方法を含む候補報告です。
 
 ```bash
-devguard security-check --mode general
-devguard security-check --mode general --json
+safecheck security-check --mode general
+safecheck security-check --mode general --json
 ```
 
 一般脆弱性の代表ルールは、TypeScript / Python / PHP / Dartの入力と危険APIの組み合わせを対象にします。parameterized query、固定コマンドなど安全な実装は検出対象から除外しますが、最終的なレビューとテストは必要です。
@@ -220,13 +220,13 @@ devguard security-check --mode general --json
 CIで集計する場合はJSON形式を利用できます。検出内容、解析不能ファイル、severity別・ruleId別の集計を出力します。
 
 ```bash
-devguard security-check --json > devguard-security.json
+safecheck security-check --json > devguard-security.json
 ```
 
 GitHub Code Scanningへ取り込む場合はSARIF形式を利用します。Security FlowとGeneral VulnerabilityはFindingの`category`として区別され、GitHub上でファイル・行番号・severityを確認できます。
 
 ```bash
-devguard security-check --sarif > devguard.sarif
+safecheck security-check --sarif > devguard.sarif
 ```
 
 GitHub Actionsでは、ビルド後にSARIFを生成して`github/codeql-action/upload-sarif`でアップロードします。検出結果のアップロードと、High検出によるマージ停止は別のステップとして設定してください。
@@ -234,7 +234,7 @@ GitHub Actionsでは、ビルド後にSARIFを生成して`github/codeql-action/
 既存検出をベースラインへ登録する場合は、設定した`baselinePath`へ書き出します。未設定の場合は`.devguard-security-baseline.json`が使用されます。
 
 ```bash
-devguard security-check --write-baseline
+safecheck security-check --write-baseline
 git add .devguard.yml .devguard-security-baseline.json
 ```
 
@@ -282,13 +282,13 @@ DevGuardはdefault keyword databaseで以下のセキュリティ関連パター
 `pre-commit` では以下を実行します。
 
 ```bash
-npx --yes --package=@nto300002/devguard devguard check --staged
+npx --yes --package=agent-safecheck safecheck check --staged
 ```
 
 `pre-push` では以下を実行します。
 
 ```bash
-npx --yes --package=@nto300002/devguard devguard push-check --agent-block
+npx --yes --package=agent-safecheck safecheck push-check --agent-block
 ```
 
 High riskのcommit findingがある場合はcommitを停止します。High riskのpush findingがある場合はpushを停止します。Security FlowのHigh検出も同様に停止対象です。

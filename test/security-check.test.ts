@@ -292,4 +292,28 @@ describe("security flow scan", () => {
 
     expect(result.filter((finding) => finding.category === "general-vulnerability")).toHaveLength(0);
   });
+
+  it("does not mistake database request.get calls for SSRF", () => {
+    const findings = scanText("app/services/approval.py", "approval_request = db.get(id)\nvalue = approval_request.get(\"status\")\n", "python");
+
+    expect(findings.filter((finding) => finding.ruleId === "general-ssrf")).toHaveLength(0);
+  });
+
+  it("does not report argument-list subprocess calls without shell execution", () => {
+    const findings = scanText("scripts/run_alembic.py", "subprocess.run([\"alembic\", *alembic_args], check=True)\n", "python");
+
+    expect(findings.filter((finding) => finding.ruleId === "general-command-injection")).toHaveLength(0);
+  });
+
+  it("keeps detecting shell command construction with external input", () => {
+    const findings = scanText("app/run.py", "subprocess.run(\"ping \" + request.args[\"host\"], shell=True)\n", "python");
+
+    expect(findings).toEqual([expect.objectContaining({ ruleId: "general-command-injection", severity: "high" })]);
+  });
+
+  it("lowers confidence for dynamic SQL backed by a fixed identifier list", () => {
+    const findings = scanText("scripts/cleanup.py", "ALLOWED_TABLES = [\"users\"]\ndb.execute(f\"DELETE FROM {ALLOWED_TABLES[0]}\")\n", "python");
+
+    expect(findings).toEqual([expect.objectContaining({ ruleId: "general-sqli", confidence: "low", severity: "high" })]);
+  });
 });

@@ -14,20 +14,20 @@ import { applySecurityAllowlist, applySecurityBaseline, filterSecurityFindingsBy
 const helpText = `DevGuard
 
 使い方:
-  devguard doctor
-  devguard init
-  devguard check --staged
-  devguard check --staged-diff
-  devguard check --worktree-diff
-  devguard check --all-diff
-  devguard security-check
-  devguard security-check --json
-  devguard security-check --sarif
-  devguard security-check --mode general
-  devguard security-check --write-baseline
-  devguard push-check
-  devguard install-hooks [--include-submodules]
-  devguard --help
+  safecheck doctor
+  safecheck init
+  safecheck check --staged
+  safecheck check --staged-diff
+  safecheck check --worktree-diff
+  safecheck check --all-diff
+  safecheck security-check
+  safecheck security-check --json
+  safecheck security-check --sarif
+  safecheck security-check --mode general
+  safecheck security-check --write-baseline
+  safecheck push-check
+  safecheck install-hooks [--include-submodules]
+  safecheck --help
 
 AI開発向けのpre-commit / pre-pushセルフレビューCLIです。
 `;
@@ -92,7 +92,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   }
 
   process.stderr.write(`不明なコマンド: ${args.join(" ")}\n`);
-  process.stderr.write("使い方は devguard --help を確認してください。\n");
+  process.stderr.write("使い方は safecheck --help を確認してください。\n");
   return 1;
 }
 

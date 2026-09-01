@@ -62,9 +62,9 @@ The initial target user is the project owner.
 1. Git root auto-detection
 2. Root-relative path normalization
 3. `.devguard.yml` loading
-4. `devguard doctor`
-5. `devguard check --staged`
-6. `devguard push-check`
+4. `safecheck doctor`
+5. `safecheck check --staged`
+6. `safecheck push-check`
 7. `defaultBranch...HEAD` diff acquisition
 8. `keywordRules`
 9. `logPolicy` and `personalStrictLog`
@@ -76,7 +76,7 @@ The initial target user is the project owner.
 15. `pre-commit` and `pre-push` hook installation
 16. Security Flow checks for TypeScript, Python, PHP, Dart, YAML, and Dockerfile
 17. Syntax-aware source-to-sink checks with analysis-issue reporting
-18. `devguard security-check` and CI-friendly JSON output
+18. `safecheck security-check` and CI-friendly JSON output
 19. Security allowlist and baseline support with expiration/traceability
 20. Separate `Security Flow` and `General Vulnerability` detection modes
 21. Exclude dependency, virtual-environment, cache, and generated directories from repository scans
@@ -106,7 +106,7 @@ The initial target user is the project owner.
 
 ## 7. Core Commands
 
-### `devguard doctor`
+### `safecheck doctor`
 
 Displays root detection, config detection, and Git state.
 
@@ -126,7 +126,7 @@ Required output sections:
   - root-relative paths enabled
   - separator normalized to `/`
 
-### `devguard check --staged`
+### `safecheck check --staged`
 
 Diagnoses staged changes before commit.
 
@@ -140,7 +140,7 @@ Required checks:
 - commit split suggestions
 - human review checklist
 
-### `devguard check --staged-diff`
+### `safecheck check --staged-diff`
 
 Diagnoses staged changes before commit with explicit diff size guidance.
 
@@ -161,7 +161,7 @@ PR size guidance:
 If the staged diff reaches 6 files or 151 changed lines, DevGuard should warn the user in Japanese to consider smaller PRs.
 If the staged diff reaches 11 files or 301 changed lines, DevGuard should strongly recommend splitting the work before review in Japanese.
 
-### `devguard check --worktree-diff`
+### `safecheck check --worktree-diff`
 
 Diagnoses unstaged and untracked worktree changes before staging.
 
@@ -173,7 +173,7 @@ Required checks:
 - strict log policy
 - diff size guidance
 
-### `devguard check --all-diff`
+### `safecheck check --all-diff`
 
 Diagnoses all local changes compared with `HEAD`.
 
@@ -193,7 +193,7 @@ Diff scope naming:
 - `--worktree-diff`: unstaged and untracked worktree changes
 - `--all-diff`: staged, unstaged, and untracked changes
 
-### `devguard push-check`
+### `safecheck push-check`
 
 Diagnoses branch-level changes before push.
 
@@ -205,7 +205,7 @@ Required checks:
 - manual test confirmation todos
 - AI-agent confirmation block
 
-### `devguard install-hooks`
+### `safecheck install-hooks`
 
 Installs Git hooks for:
 
@@ -216,7 +216,7 @@ Existing hooks must not be overwritten silently.
 Hook directory resolution must use Git's own hook path so submodules and worktrees are supported.
 When `--include-submodules` is provided, DevGuard should install the same hooks into the root repository and initialized recursive submodules.
 
-### `devguard init`
+### `safecheck init`
 
 Generates a `.devguard.yml` template.
 
@@ -413,7 +413,7 @@ The MVP does not strictly parse pre-push standard input refs. It uses `defaultBr
 Command:
 
 ```bash
-npx --yes --package=@nto300002/devguard devguard check --staged
+npx --yes --package=agent-safecheck safecheck check --staged
 ```
 
 Targets:
@@ -442,7 +442,7 @@ Exit codes:
 Command:
 
 ```bash
-npx --yes --package=@nto300002/devguard devguard push-check --agent-block
+npx --yes --package=agent-safecheck safecheck push-check --agent-block
 ```
 
 Push blockers:
@@ -453,17 +453,17 @@ Push blockers:
 
 ### Security detection modes
 
-`devguard security-check` supports the default `all` mode and the following focused mode:
+`safecheck security-check` supports the default `all` mode and the following focused mode:
 
 ```bash
-devguard security-check --mode security-flow
-devguard security-check --mode general
-devguard security-check --mode general --json
+safecheck security-check --mode security-flow
+safecheck security-check --mode general
+safecheck security-check --mode general --json
 ```
 
 `security-flow` reports sensitive data source-to-sink flows. `general` reports vulnerability candidates such as SQL Injection, XSS, Command Injection, unsafe deserialization, SSRF, and Path Traversal. General findings are candidates, not confirmed vulnerabilities, and include category, CWE, OWASP category, confidence, remediation, file path, and line number.
 
-`devguard security-check --sarif` must output SARIF 2.1.0 containing tool metadata, unique rules, findings, locations, severity, category, confidence, CWE/OWASP metadata, remediation, and parse-error notifications. Secret values must never be included. The generated file must be uploadable by GitHub Code Scanning.
+`safecheck security-check --sarif` must output SARIF 2.1.0 containing tool metadata, unique rules, findings, locations, severity, category, confidence, CWE/OWASP metadata, remediation, and parse-error notifications. Secret values must never be included. The generated file must be uploadable by GitHub Code Scanning.
 
 Repository scans must skip standard non-source directories, including TypeScript/JavaScript dependencies and build output (`node_modules`, `dist`, `build`, `.next`, `coverage`), Python virtual environments and caches (`.venv`, `venv`, `env`, `__pycache__`, `.pytest_cache`), PHP dependencies (`vendor`), and Dart/Flutter tooling output (`.dart_tool`, `.pub-cache`).
 
@@ -506,14 +506,14 @@ High-risk push conditions:
 
 ## 16. MVP Completion Criteria
 
-- `devguard doctor` works.
+- `safecheck doctor` works.
 - Running from root and subdirectories detects the same Git root.
 - `.devguard.yml` can be loaded.
 - Missing config falls back to default config.
-- `devguard check --staged` works.
+- `safecheck check --staged` works.
 - `personalStrictLog` detects variable logs.
 - Suppression comments and reasons are handled.
-- `devguard push-check` can inspect `defaultBranch...HEAD`.
+- `safecheck push-check` can inspect `defaultBranch...HEAD`.
 - Environment/secrets additions stop push.
 - Out-of-scope DB/config changes stop push.
 - Remaining variable logs stop push.
