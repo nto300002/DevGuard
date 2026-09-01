@@ -39,6 +39,7 @@ export type DevGuardConfig = {
   };
   securityCheck: {
     enabled: boolean;
+    astEnabled: boolean;
     failOnUnparseable: boolean;
     baselinePath: string | null;
     excludePaths: string[];
@@ -153,6 +154,7 @@ export const DEFAULT_CONFIG: DevGuardConfig = {
   },
   securityCheck: {
     enabled: true,
+    astEnabled: true,
     failOnUnparseable: false,
     baselinePath: null,
     excludePaths: [],
@@ -425,7 +427,7 @@ function mergeConfig(base: DevGuardConfig, raw: RawConfig): DevGuardConfig {
     }
     base.securityCheck = {
       ...base.securityCheck,
-      ...pickBooleanFields(raw.securityCheck, ["enabled", "failOnUnparseable"]),
+      ...pickBooleanFields(raw.securityCheck, ["enabled", "astEnabled", "failOnUnparseable"]),
       ...(raw.securityCheck.baselinePath === null || typeof raw.securityCheck.baselinePath === "string" ? { baselinePath: raw.securityCheck.baselinePath as string | null } : {}),
       excludePaths: parseStringArray(raw.securityCheck.excludePaths, "securityCheck.excludePaths"),
       allowlist: parseSecurityAllowlist(raw.securityCheck.allowlist),

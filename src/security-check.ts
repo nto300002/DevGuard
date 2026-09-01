@@ -81,6 +81,7 @@ export type SecurityScanTextResult = {
 
 export type SecurityRepositoryScanOptions = {
   excludePaths?: readonly string[];
+  astEnabled?: boolean;
 };
 
 export function filterSecurityFindingsByMode(findings: SecurityFinding[], mode: SecurityScanMode): SecurityFinding[] {
@@ -304,7 +305,7 @@ export async function scanRepositoryDetailed(root: string, options: SecurityRepo
     const content = await readFile(filePath, "utf8");
     const relativePath = normalizePath(path.relative(root, filePath));
     if ((options.excludePaths ?? []).some((pattern) => matchesPath(pattern, relativePath))) continue;
-    const result = scanTextDetailed(relativePath, content, languageForPath(relativePath));
+    const result = scanTextDetailed(relativePath, content, languageForPath(relativePath), options.astEnabled ?? true);
     findings.push(...result.findings);
     analysisIssues.push(...result.analysisIssues);
   }
@@ -331,13 +332,13 @@ export function applySecurityAllowlist(findings: SecurityFinding[], entries: rea
   });
 }
 
-export function scanText(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath)): SecurityFinding[] {
-  return scanTextDetailed(filePath, content, language).findings;
+export function scanText(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath), astEnabled = true): SecurityFinding[] {
+  return scanTextDetailed(filePath, content, language, astEnabled).findings;
 }
 
-export function scanTextDetailed(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath)): SecurityScanTextResult {
+export function scanTextDetailed(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath), astEnabled = true): SecurityScanTextResult {
   if (language === "typescript") {
-    return addGeneralFindings(scanTypeScriptAstDetailed(filePath, content), filePath, content, language);
+    return addGeneralFindings(scanTypeScriptAstDetailed(filePath, content, astEnabled), filePath, content, language);
   }
   if (language === "python") {
     return addGeneralFindings(scanPythonAstDetailed(filePath, content), filePath, content, language);
@@ -524,7 +525,7 @@ function scanTypeScriptAst(filePath: string, content: string): SecurityFinding[]
   return scanTypeScriptAstDetailed(filePath, content).findings;
 }
 
-function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityScanTextResult {
+function scanTypeScriptAstDetailed(filePath: string, content: string, astEnabled = true): SecurityScanTextResult {
   const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, scriptKindForPath(filePath));
   const diagnostics = (sourceFile as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [];
   if (diagnostics.length > 0) {
@@ -533,7 +534,7 @@ function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityS
       analysisIssues: [{ filePath, language: "typescript", kind: "parse-error", message: formatDiagnostic(diagnostics[0]) }],
     };
   }
-  const moduleContext = detectNextModuleContext(filePath, content);
+  const moduleContext = astEnabled ? detectNextModuleContext(filePath, content) : undefined;
   const tainted = new Map<string, SecuritySource>();
   const findings: SecurityFinding[] = [];
 
@@ -561,7 +562,7 @@ function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityS
           flow: `${source} -> ${sink}`,
           message: `${formatSource(source)}が${formatSink(sink)}へ流入する可能性があります。`,
           remediation: remediationForSink(sink),
-          executionContext: moduleContext.executionContext,
+          ...(moduleContext ? { executionContext: moduleContext.executionContext } : {}),
         }));
       }
     }

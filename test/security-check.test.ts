@@ -26,6 +26,13 @@ describe("security flow scan", () => {
     ]);
   });
 
+  it("can disable Next.js AST context analysis while retaining the security flow scan", () => {
+    const findings = scanText("app/dashboard/page.tsx", '"use client";\nconst key = process.env.API_KEY;\nlogger.error(key);\n', "typescript", false);
+
+    expect(findings).toEqual([expect.objectContaining({ ruleId: "secret-to-log" })]);
+    expect(findings[0]).not.toHaveProperty("executionContext");
+  });
+
   it("detects browser-only APIs and dangerouslySetInnerHTML from a Next.js AST", () => {
     const result = analyzeNextModuleAst(
       "app/dashboard/page.tsx",

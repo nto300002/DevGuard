@@ -77,7 +77,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     const root = await detectRoot(process.cwd());
     const { config } = await loadConfig(root.gitRoot);
     const mode = securityScanMode(args);
-    const scan = config.securityCheck.enabled ? await scanRepositoryDetailed(root.gitRoot, { excludePaths: config.securityCheck.excludePaths }) : { findings: [], analysisIssues: [] };
+    const scan = config.securityCheck.enabled ? await scanRepositoryDetailed(root.gitRoot, { excludePaths: config.securityCheck.excludePaths, astEnabled: config.securityCheck.astEnabled }) : { findings: [], analysisIssues: [] };
     if (args.includes("--write-baseline")) {
       const baselinePath = config.securityCheck.baselinePath ?? ".devguard-security-baseline.json";
       await writeFile(path.join(root.gitRoot, baselinePath), `${JSON.stringify({ findingIds: scan.findings.map((finding) => finding.id) }, null, 2)}\n`, "utf8");
