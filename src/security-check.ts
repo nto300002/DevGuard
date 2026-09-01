@@ -104,6 +104,15 @@ const SINK_PATTERNS: Array<{ sink: SecuritySink; pattern: RegExp }> = [
   { sink: "deployment", pattern: /(?:secrets\.[A-Z0-9_]+|--substitutions|--update-env-vars|--set-env-vars|build-arg|\bARG\s+[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|KEY))/i },
 ];
 
+const SECRET_FORMAT_PATTERNS: Array<{ ruleId: string; label: string; pattern: RegExp }> = [
+  { ruleId: "secret-github-token", label: "GitHub token", pattern: /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g },
+  { ruleId: "secret-aws-access-key", label: "AWS access key", pattern: /\bAKIA[0-9A-Z]{16}\b/g },
+  { ruleId: "secret-stripe-key", label: "Stripe key", pattern: /\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b/g },
+  { ruleId: "secret-jwt", label: "JWT", pattern: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g },
+  { ruleId: "secret-private-key", label: "private key", pattern: /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/g },
+  { ruleId: "secret-connection-string", label: "database connection string", pattern: /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/[^\s"'`]+/gi },
+];
+
 export async function scanRepository(root: string, options: SecurityRepositoryScanOptions = {}): Promise<SecurityFinding[]> {
   return (await scanRepositoryDetailed(root, options)).findings;
 }
@@ -148,6 +157,30 @@ export function scanText(filePath: string, content: string, language: SecurityLa
   return scanTextDetailed(filePath, content, language).findings;
 }
 
+export function scanSecretPatterns(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath)): SecurityFinding[] {
+  const findings: SecurityFinding[] = [];
+  for (const { ruleId, label, pattern } of SECRET_FORMAT_PATTERNS) {
+    for (const match of content.matchAll(pattern)) {
+      const offset = match.index ?? 0;
+      const lineNumber = content.slice(0, offset).split(/\r?\n/).length;
+      findings.push(createFinding({
+        filePath,
+        lineNumber,
+        language,
+        ruleId,
+        severity: "high",
+        confidence: "high",
+        source: "secret",
+        sink: "file",
+        flow: "secret literal -> source file",
+        message: `${label}形式のSecretを検出しました（値: [MASKED]）。revoke / rotate後、リポジトリからremoveしてください。`,
+        remediation: "漏えいしたSecretをrevokeし、新しい値へrotateしたうえで、履歴を含むリポジトリからremoveしてください。",
+      }));
+    }
+  }
+  return dedupeFindings(findings);
+}
+
 export function scanTextDetailed(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath)): SecurityScanTextResult {
   if (language === "typescript") {
     return addGeneralFindings(scanTypeScriptAstDetailed(filePath, content), filePath, content, language);
@@ -169,7 +202,7 @@ export function scanTextDetailed(filePath: string, content: string, language: Se
 }
 
 function addGeneralFindings(result: SecurityScanTextResult, filePath: string, content: string, language: SecurityLanguage): SecurityScanTextResult {
-  return { ...result, findings: dedupeFindings([...result.findings, ...scanGeneralVulnerabilities(filePath, content, language)]) };
+  return { ...result, findings: dedupeFindings([...result.findings, ...scanGeneralVulnerabilities(filePath, content, language), ...scanSecretPatterns(filePath, content, language)]) };
 }
 
 function scanGeneralVulnerabilities(filePath: string, content: string, language: SecurityLanguage): SecurityFinding[] {

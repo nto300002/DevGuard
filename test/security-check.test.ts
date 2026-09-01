@@ -2,9 +2,44 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanSecretPatterns, scanText, scanTextDetailed } from "../src/security-check.js";
 
 describe("security flow scan", () => {
+  it("detects common secret formats without exposing their values", () => {
+    const content = [
+      "const github = 'ghp_1234567890abcdefghijklmnopqrstuvwxyz';",
+      "const aws = 'AKIA1234567890ABCDEF';",
+      "const stripe = 'sk_live_1234567890abcdef';",
+      "const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.signature';",
+      "const key = '-----BEGIN PRIVATE KEY-----';",
+      "const database = 'postgres://user:password@example.test:5432/app';",
+    ].join("\n");
+    const findings = scanSecretPatterns("src/config.ts", content, "typescript");
+
+    expect(findings.map((finding) => finding.ruleId)).toEqual([
+      "secret-github-token",
+      "secret-aws-access-key",
+      "secret-stripe-key",
+      "secret-jwt",
+      "secret-private-key",
+      "secret-connection-string",
+    ]);
+    expect(JSON.stringify(findings)).not.toContain("ghp_1234567890abcdefghijklmnopqrstuvwxyz");
+    expect(findings.every((finding) => finding.message.includes("[MASKED]"))).toBe(true);
+  });
+
+  it("does not treat an ordinary non-random string as a secret", () => {
+    expect(scanSecretPatterns("src/config.ts", "const message = 'hello application settings';\n", "typescript")).toEqual([]);
+  });
+
+  it("includes format-based Secret findings in the repository scan path", () => {
+    const findings = scanText("src/config.ts", "const stripe = 'sk_live_1234567890abcdef';\n", "typescript");
+
+    expect(findings).toEqual([
+      expect.objectContaining({ ruleId: "secret-stripe-key", severity: "high", source: "secret" }),
+    ]);
+  });
+
   it("detects TypeScript environment values flowing into logs", () => {
     const findings = scanText("lib/auth.ts", "const key = process.env.API_KEY;\nlogger.error(key);\n", "typescript");
 
