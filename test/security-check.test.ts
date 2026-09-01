@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { applySecurityAllowlist, applySecurityBaseline, detectNextModuleContext, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
+import { analyzeNextModuleAst, applySecurityAllowlist, applySecurityBaseline, detectNextModuleContext, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanText, scanTextDetailed } from "../src/security-check.js";
 
 describe("security flow scan", () => {
   it("detects Next.js client and route-handler execution contexts from module directives and paths", () => {
@@ -24,6 +24,30 @@ describe("security flow scan", () => {
     expect(findings).toEqual([
       expect.objectContaining({ executionContext: "client", lineNumber: 3 }),
     ]);
+  });
+
+  it("detects browser-only APIs and dangerouslySetInnerHTML from a Next.js AST", () => {
+    const result = analyzeNextModuleAst(
+      "app/dashboard/page.tsx",
+      '"use server";\nwindow;\nlocalStorage.setItem("x", "value");\nreturn <div dangerouslySetInnerHTML={{ __html: html }} />;\n',
+    );
+
+    expect(result.executionContext).toBe("server");
+    expect(result.browserOnlyUsages).toEqual([
+      { name: "window", lineNumber: 2 },
+      { name: "localStorage", lineNumber: 3 },
+    ]);
+    expect(result.dangerouslySetInnerHTML).toEqual([{ lineNumber: 4 }]);
+  });
+
+  it("does not detect Next.js AST patterns inside strings or comments", () => {
+    const result = analyzeNextModuleAst(
+      "app/page.tsx",
+      'const text = "window localStorage dangerouslySetInnerHTML";\n// document sessionStorage\nexport default function Page() { return <div />; }\n',
+    );
+
+    expect(result.browserOnlyUsages).toEqual([]);
+    expect(result.dangerouslySetInnerHTML).toEqual([]);
   });
 
   it("detects TypeScript environment values flowing into logs", () => {

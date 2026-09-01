@@ -21,6 +21,17 @@ export type NextModuleContext = {
   directives: string[];
 };
 
+export type NextBrowserOnlyUsage = {
+  name: "window" | "document" | "localStorage" | "sessionStorage";
+  lineNumber: number;
+};
+
+export type NextModuleAstAnalysis = {
+  executionContext: NextExecutionContext;
+  browserOnlyUsages: NextBrowserOnlyUsage[];
+  dangerouslySetInnerHTML: Array<{ lineNumber: number }>;
+};
+
 export type SecurityFinding = {
   id: string;
   ruleId: string;
@@ -77,6 +88,67 @@ export function detectNextModuleContext(filePath: string, content: string): Next
   if (directives.includes("use client")) return { executionContext: "client", isRouteHandler, directives };
   if (directives.includes("use server")) return { executionContext: "server", isRouteHandler, directives };
   return { executionContext: "unknown", isRouteHandler, directives };
+}
+
+export function analyzeNextModuleAst(filePath: string, content: string): NextModuleAstAnalysis {
+  const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, scriptKindForPath(filePath));
+  const moduleContext = detectNextModuleContext(filePath, content);
+  const browserOnlyUsages: NextBrowserOnlyUsage[] = [];
+  const dangerouslySetInnerHTML: Array<{ lineNumber: number }> = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && isNextBrowserGlobal(node.text) && isTypeScriptReference(node)) {
+      browserOnlyUsages.push({
+        name: node.text,
+        lineNumber: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
+      });
+    }
+
+    if (ts.isJsxAttribute(node) && ts.isIdentifier(node.name) && node.name.text === "dangerouslySetInnerHTML") {
+      dangerouslySetInnerHTML.push({
+        lineNumber: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
+      });
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+  return {
+    executionContext: moduleContext.executionContext,
+    browserOnlyUsages: dedupeNextBrowserOnlyUsages(browserOnlyUsages),
+    dangerouslySetInnerHTML: dedupeNextLines(dangerouslySetInnerHTML),
+  };
+}
+
+function isNextBrowserGlobal(name: string): name is NextBrowserOnlyUsage["name"] {
+  return name === "window" || name === "document" || name === "localStorage" || name === "sessionStorage";
+}
+
+function isTypeScriptReference(node: ts.Identifier): boolean {
+  const parent = node.parent;
+  if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
+  if (ts.isPropertyAssignment(parent) && parent.name === node) return false;
+  if (ts.isVariableDeclaration(parent) && parent.name === node) return false;
+  return true;
+}
+
+function dedupeNextBrowserOnlyUsages(usages: NextBrowserOnlyUsage[]): NextBrowserOnlyUsage[] {
+  const seen = new Set<string>();
+  return usages.filter((usage) => {
+    const key = `${usage.name}:${usage.lineNumber}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function dedupeNextLines(lines: Array<{ lineNumber: number }>): Array<{ lineNumber: number }> {
+  const seen = new Set<number>();
+  return lines.filter((line) => {
+    if (seen.has(line.lineNumber)) return false;
+    seen.add(line.lineNumber);
+    return true;
+  });
 }
 
 export async function loadSecurityBaseline(root: string, baselinePath: string | null): Promise<Set<string>> {
