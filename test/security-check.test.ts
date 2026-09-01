@@ -50,6 +50,26 @@ describe("security flow scan", () => {
     ]);
   });
 
+  it("uses URL allowlists and path boundaries as safety context", () => {
+    const findings = scanText(
+      "src/files.ts",
+      "const allowedHosts = new Set(['api.example.test']);\nif (!allowedHosts.has(new URL(target).hostname)) throw new Error('blocked');\nfetch(target);\nconst root = path.resolve('/srv/files');\nconst safePath = path.resolve(root, input);\nif (!safePath.startsWith(`${root}${path.sep}`)) throw new Error('blocked');\nreadFile(safePath);\n",
+      "typescript",
+    );
+
+    expect(findings.filter((finding) => finding.ruleId === "general-ssrf" || finding.ruleId === "general-path-traversal")).toEqual([]);
+  });
+
+  it("lowers SQL confidence when the input is validated as a UUID", () => {
+    const findings = scanText(
+      "src/users.ts",
+      "const UUID_RE = /^[0-9a-f-]{36}$/i;\nif (!UUID_RE.test(id)) throw new Error('invalid id');\ndb.query(`SELECT * FROM users WHERE id = '${id}'`);\n",
+      "typescript",
+    );
+
+    expect(findings).toEqual([expect.objectContaining({ ruleId: "general-sqli", confidence: "low" })]);
+  });
+
   it("uses syntax-aware data flow instead of marking an unrelated log", () => {
     const findings = scanText(
       "src/auth.ts",

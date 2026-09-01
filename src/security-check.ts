@@ -175,6 +175,9 @@ function addGeneralFindings(result: SecurityScanTextResult, filePath: string, co
 function scanGeneralVulnerabilities(filePath: string, content: string, language: SecurityLanguage): SecurityFinding[] {
   const findings: SecurityFinding[] = [];
   const lines = content.split(/\r?\n/);
+  const hasUrlAllowlistValidation = /(?:allowed(?:Hosts|Urls)|allowlist|whitelist)[\s\S]{0,240}(?:hostname|origin)|(?:hostname|origin)[\s\S]{0,240}(?:allowed(?:Hosts|Urls)|allowlist|whitelist)/i.test(content);
+  const hasPathBoundaryValidation = /(?:startsWith|within|isWithin|relative)[\s\S]{0,180}(?:path\.sep|realpath|resolve)|(?:path\.sep|realpath|resolve)[\s\S]{0,180}(?:startsWith|within|isWithin|relative)/i.test(content);
+  const hasUuidValidation = /(?:uuid|UUID_RE|isUUID|validateUUID)[\s\S]{0,160}(?:test\s*\(|validate|parse)|(?:test\s*\(|validate|parse)[\s\S]{0,160}(?:uuid|UUID_RE|isUUID)/i.test(content);
   const usesFixedIdentifierAllowlist = /(?:allowed|allowlist|whitelist|permitted|valid)[\w-]*\s*=\s*\[(?:\s*["'][^"']+["']\s*,?)+\s*\]/i.test(content);
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
@@ -183,11 +186,11 @@ function scanGeneralVulnerabilities(filePath: string, content: string, language:
     };
 
     if (language === "typescript") {
-      if (/\.(?:query|execute)\s*\([^)]*(?:\$\{|["'][^"']*["']\s*\+)/.test(line)) add("general-sqli", "sql", "CWE-89", "A03:2021-Injection", "外部入力を含むSQL文字列を実行している可能性があります。", "プレースホルダーとparameterized queryを使用してください。");
+      if (/\.(?:query|execute)\s*\([^)]*(?:\$\{|["'][^"']*["']\s*\+)/.test(line)) add("general-sqli", "sql", "CWE-89", "A03:2021-Injection", "外部入力を含むSQL文字列を実行している可能性があります。", "プレースホルダーとparameterized queryを使用してください。", hasUuidValidation ? "low" : "medium");
       if (/(?:innerHTML\s*=\s*(?!["'`])|dangerouslySetInnerHTML|insertAdjacentHTML) /.test(`${line} `)) add("general-xss", "html", "CWE-79", "A03:2021-Injection", "未検証の値がHTML/DOMへ挿入される可能性があります。", "出力エスケープまたは安全なHTMLサニタイズを使用してください。");
       if (/(?:child_process\.)?exec\s*\(\s*(?!["'`])|\beval\s*\(|new\s+Function\s*\(/.test(line)) add("general-command-injection", "command", "CWE-78", "A03:2021-Injection", "外部入力がコマンドまたはコード実行APIへ到達する可能性があります。", "固定コマンドと引数配列を使用し、外部入力を実行コードに渡さないでください。");
-      if (/(?:fetch|axios\.(?:get|post|request)|http\.(?:get|request))\s*\([^"'`]/.test(line) && /(?:req\.|request|url|target|input)/i.test(line)) add("general-ssrf", "http-client", "CWE-918", "A10:2021-SSRF", "外部入力でHTTP接続先を指定できる可能性があります。", "許可リスト、URLスキーム検証、プライベートネットワーク遮断を実装してください。");
-      if (/(?:readFile|writeFile|createReadStream|path\.join)\s*\([^"'`]/.test(line) && /(?:req\.|request|path|file|input)/i.test(line)) add("general-path-traversal", "file", "CWE-22", "A01:2021-Broken Access Control", "外部入力がファイルパスへ使われる可能性があります。", "実パスを検証し、許可ディレクトリ配下に正規化して制限してください。");
+      if (!hasUrlAllowlistValidation && /(?:fetch|axios\.(?:get|post|request)|http\.(?:get|request))\s*\([^"'`]/.test(line) && /(?:req\.|request|url|target|input)/i.test(line)) add("general-ssrf", "http-client", "CWE-918", "A10:2021-SSRF", "外部入力でHTTP接続先を指定できる可能性があります。", "許可リスト、URLスキーム検証、プライベートネットワーク遮断を実装してください。");
+      if (!hasPathBoundaryValidation && /(?:readFile|writeFile|createReadStream|path\.join)\s*\([^"'`]/.test(line) && /(?:req\.|request|path|file|input)/i.test(line)) add("general-path-traversal", "file", "CWE-22", "A01:2021-Broken Access Control", "外部入力がファイルパスへ使われる可能性があります。", "実パスを検証し、許可ディレクトリ配下に正規化して制限してください。");
     }
 
     if (language === "python") {
