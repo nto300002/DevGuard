@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseNpmAuditJson, parsePipAuditJson, runNpmAudit, runPipAudit } from "../src/dependency-audit.js";
+import { parseComposerAuditJson, parseNpmAuditJson, parsePipAuditJson, runNpmAudit, runPipAudit } from "../src/dependency-audit.js";
 
 describe("dependency audit", () => {
   it("converts npm audit vulnerabilities into common findings", () => {
@@ -100,5 +100,31 @@ describe("dependency audit", () => {
 
     expect(result.findings).toEqual([]);
     expect(result.analysisIssue).toEqual(expect.objectContaining({ kind: "parser-unavailable", filePath: "requirements.txt" }));
+  });
+
+  it("converts composer audit JSON into common findings", () => {
+    const findings = parseComposerAuditJson({
+      advisories: {
+        "symfony/http-kernel": [{
+          advisoryId: "CVE-2024-50340",
+          affectedVersions: "<6.4.12",
+          title: "Access control issue",
+          cve: "CVE-2024-50340",
+          reportedAt: "2024-11-12T00:00:00+00:00",
+        }],
+      },
+    });
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "dependency-vulnerability",
+        language: "php",
+        filePath: "composer.lock",
+        dependencyName: "symfony/http-kernel",
+        advisoryId: "CVE-2024-50340",
+        affectedRange: "<6.4.12",
+        severity: "medium",
+      }),
+    ]);
   });
 });

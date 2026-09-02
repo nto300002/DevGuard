@@ -201,6 +201,46 @@ export function parsePipAuditJson(input: unknown): SecurityFinding[] {
   return findings;
 }
 
+export function parseComposerAuditJson(input: unknown): SecurityFinding[] {
+  if (!isRecord(input) || !isRecord(input.advisories)) return [];
+  const findings: SecurityFinding[] = [];
+
+  for (const [dependencyName, rawAdvisories] of Object.entries(input.advisories)) {
+    if (!Array.isArray(rawAdvisories)) continue;
+    for (const rawAdvisory of rawAdvisories) {
+      if (!isRecord(rawAdvisory)) continue;
+      const advisoryId = typeof rawAdvisory.advisoryId === "string"
+        ? rawAdvisory.advisoryId
+        : typeof rawAdvisory.cve === "string" ? rawAdvisory.cve : undefined;
+      if (!advisoryId) continue;
+      const affectedRange = typeof rawAdvisory.affectedVersions === "string" ? rawAdvisory.affectedVersions : undefined;
+      const title = typeof rawAdvisory.title === "string" ? rawAdvisory.title : undefined;
+      const fixedVersion = typeof rawAdvisory.fixedVersions === "string" ? rawAdvisory.fixedVersions : firstString(rawAdvisory.fixedVersions);
+      findings.push({
+        id: `dependency-vulnerability:${dependencyName}:${advisoryId}`,
+        ruleId: "dependency-vulnerability",
+        language: "php",
+        severity: normalizeSeverity(rawAdvisory.severity) ?? "medium",
+        confidence: "high",
+        filePath: "composer.lock",
+        lineNumber: 1,
+        source: "dependency",
+        sink: "package",
+        flow: "dependency -> vulnerable package",
+        message: `依存パッケージ ${dependencyName} に既知の脆弱性があります。${title ? `概要: ${title}。` : ""}`,
+        remediation: fixedVersion ? `${dependencyName}を${fixedVersion}以降へ更新してください。` : `${dependencyName}の修正版を確認して更新してください。`,
+        category: "general-vulnerability",
+        dependencyName,
+        advisoryId,
+        affectedRange,
+        fixedVersion,
+      });
+    }
+  }
+
+  return findings;
+}
+
 function firstString(value: unknown): string | undefined {
   return Array.isArray(value) ? value.find((item): item is string => typeof item === "string") : undefined;
 }
