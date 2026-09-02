@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseNpmAuditJson, parsePipAuditJson, runNpmAudit } from "../src/dependency-audit.js";
+import { parseNpmAuditJson, parsePipAuditJson, runNpmAudit, runPipAudit } from "../src/dependency-audit.js";
 
 describe("dependency audit", () => {
   it("converts npm audit vulnerabilities into common findings", () => {
@@ -82,5 +82,23 @@ describe("dependency audit", () => {
         severity: "medium",
       }),
     ]);
+  });
+
+  it("runs pip-audit and parses JSON even when vulnerabilities are found", async () => {
+    const result = await runPipAudit("/tmp/project", async () => ({
+      stdout: JSON.stringify([{ name: "jinja2", version: "3.1.2", vulns: [{ id: "CVE-2024-22195", fix_versions: ["3.1.3"] }] }]),
+      stderr: "",
+      status: 1,
+    }));
+
+    expect(result.analysisIssue).toBeUndefined();
+    expect(result.findings).toEqual([expect.objectContaining({ dependencyName: "jinja2", advisoryId: "CVE-2024-22195" })]);
+  });
+
+  it("reports an analysis issue when pip-audit is unavailable", async () => {
+    const result = await runPipAudit("/tmp/project", async () => ({ stdout: "", stderr: "pip-audit: command not found", status: 127 }));
+
+    expect(result.findings).toEqual([]);
+    expect(result.analysisIssue).toEqual(expect.objectContaining({ kind: "parser-unavailable", filePath: "requirements.txt" }));
   });
 });

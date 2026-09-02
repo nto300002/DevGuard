@@ -17,6 +17,10 @@ export type NpmAuditResult = {
   analysisIssue?: SecurityAnalysisIssue;
 };
 
+export type PipAuditCommandResult = NpmAuditCommandResult;
+export type PipAuditCommandRunner = NpmAuditCommandRunner;
+export type PipAuditResult = NpmAuditResult;
+
 export async function runNpmAudit(cwd: string, runner: NpmAuditCommandRunner = defaultNpmAuditRunner): Promise<NpmAuditResult> {
   const result = await runner(cwd);
   if (!result.stdout.trim()) {
@@ -49,6 +53,40 @@ export async function runNpmAudit(cwd: string, runner: NpmAuditCommandRunner = d
 async function defaultNpmAuditRunner(cwd: string): Promise<NpmAuditCommandResult> {
   try {
     const result = await execFileAsync("npm", ["audit", "--json"], { cwd, maxBuffer: 4 * 1024 * 1024 });
+    return { stdout: result.stdout, stderr: result.stderr, status: 0 };
+  } catch (error) {
+    const failure = error as { stdout?: string; stderr?: string; code?: number };
+    return { stdout: failure.stdout ?? "", stderr: failure.stderr ?? String(error), status: typeof failure.code === "number" ? failure.code : 1 };
+  }
+}
+
+export async function runPipAudit(cwd: string, runner: PipAuditCommandRunner = defaultPipAuditRunner): Promise<PipAuditResult> {
+  const result = await runner(cwd);
+  if (!result.stdout.trim()) {
+    return {
+      findings: [],
+      analysisIssue: {
+        filePath: "requirements.txt",
+        language: "python",
+        kind: result.status === 127 ? "parser-unavailable" : "parse-error",
+        message: result.stderr.trim() || `pip-auditが終了コード${result.status}で終了し、JSON結果を返しませんでした。`,
+      },
+    };
+  }
+
+  try {
+    return { findings: parsePipAuditJson(JSON.parse(result.stdout)) };
+  } catch {
+    return {
+      findings: [],
+      analysisIssue: { filePath: "requirements.txt", language: "python", kind: "parse-error", message: "pip-auditのJSON結果を解析できません。" },
+    };
+  }
+}
+
+async function defaultPipAuditRunner(cwd: string): Promise<PipAuditCommandResult> {
+  try {
+    const result = await execFileAsync("pip-audit", ["--format=json"], { cwd, maxBuffer: 4 * 1024 * 1024 });
     return { stdout: result.stdout, stderr: result.stderr, status: 0 };
   } catch (error) {
     const failure = error as { stdout?: string; stderr?: string; code?: number };
