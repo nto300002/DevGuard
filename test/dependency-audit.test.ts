@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseComposerAuditJson, parseNpmAuditJson, parseOsvAuditJson, parsePipAuditJson, runComposerAudit, runNpmAudit, runPipAudit, runPubAudit } from "../src/dependency-audit.js";
+import { applySecurityBaseline } from "../src/security-check.js";
 
 describe("dependency audit", () => {
   it("converts npm audit vulnerabilities into common findings", () => {
@@ -187,5 +188,17 @@ describe("dependency audit", () => {
 
     expect(result.findings).toEqual([]);
     expect(result.analysisIssue).toEqual(expect.objectContaining({ kind: "parser-unavailable", filePath: "pubspec.lock" }));
+  });
+
+  it("applies the existing baseline lifecycle to dependency findings", () => {
+    const findings = parseNpmAuditJson({
+      vulnerabilities: {
+        lodash: { severity: "high", via: [{ source: "GHSA-0000-0000-0000" }] },
+      },
+    });
+
+    const result = applySecurityBaseline(findings, new Set([findings[0]!.id]));
+
+    expect(result[0]).toMatchObject({ suppressed: true, baseline: true, suppressionReason: "baseline" });
   });
 });
