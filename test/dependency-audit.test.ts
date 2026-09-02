@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseNpmAuditJson } from "../src/dependency-audit.js";
+import { parseNpmAuditJson, runNpmAudit } from "../src/dependency-audit.js";
 
 describe("dependency audit", () => {
   it("converts npm audit vulnerabilities into common findings", () => {
@@ -41,5 +41,23 @@ describe("dependency audit", () => {
 
     expect(JSON.stringify(findings)).not.toContain("real-secret");
     expect(findings[0]).toMatchObject({ advisoryId: "CVE-2025-1234", fixedVersion: undefined });
+  });
+
+  it("runs npm audit and parses JSON even when npm exits with vulnerabilities", async () => {
+    const result = await runNpmAudit("/tmp/project", async () => ({
+      stdout: JSON.stringify({ vulnerabilities: { lodash: { severity: "high", via: [{ source: "CVE-2025-1234" }] } } }),
+      stderr: "",
+      status: 1,
+    }));
+
+    expect(result.analysisIssue).toBeUndefined();
+    expect(result.findings).toEqual([expect.objectContaining({ dependencyName: "lodash", advisoryId: "CVE-2025-1234" })]);
+  });
+
+  it("reports an analysis issue when npm audit cannot produce JSON", async () => {
+    const result = await runNpmAudit("/tmp/project", async () => ({ stdout: "", stderr: "network unavailable", status: 1 }));
+
+    expect(result.findings).toEqual([]);
+    expect(result.analysisIssue).toEqual(expect.objectContaining({ kind: "parse-error", filePath: "package-lock.json" }));
   });
 });

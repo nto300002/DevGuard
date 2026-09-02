@@ -1,4 +1,60 @@
-import type { SecurityFinding, SecuritySeverity } from "./security-check.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import type { SecurityAnalysisIssue, SecurityFinding, SecuritySeverity } from "./security-check.js";
+
+const execFileAsync = promisify(execFile);
+
+export type NpmAuditCommandResult = {
+  stdout: string;
+  stderr: string;
+  status: number;
+};
+
+export type NpmAuditCommandRunner = (cwd: string) => Promise<NpmAuditCommandResult>;
+
+export type NpmAuditResult = {
+  findings: SecurityFinding[];
+  analysisIssue?: SecurityAnalysisIssue;
+};
+
+export async function runNpmAudit(cwd: string, runner: NpmAuditCommandRunner = defaultNpmAuditRunner): Promise<NpmAuditResult> {
+  const result = await runner(cwd);
+  if (!result.stdout.trim()) {
+    return {
+      findings: [],
+      analysisIssue: {
+        filePath: "package-lock.json",
+        language: "unknown",
+        kind: "parse-error",
+        message: result.stderr.trim() || `npm auditが終了コード${result.status}で終了し、JSON結果を返しませんでした。`,
+      },
+    };
+  }
+
+  try {
+    return { findings: parseNpmAuditJson(JSON.parse(result.stdout)) };
+  } catch {
+    return {
+      findings: [],
+      analysisIssue: {
+        filePath: "package-lock.json",
+        language: "unknown",
+        kind: "parse-error",
+        message: "npm auditのJSON結果を解析できません。",
+      },
+    };
+  }
+}
+
+async function defaultNpmAuditRunner(cwd: string): Promise<NpmAuditCommandResult> {
+  try {
+    const result = await execFileAsync("npm", ["audit", "--json"], { cwd, maxBuffer: 4 * 1024 * 1024 });
+    return { stdout: result.stdout, stderr: result.stderr, status: 0 };
+  } catch (error) {
+    const failure = error as { stdout?: string; stderr?: string; code?: number };
+    return { stdout: failure.stdout ?? "", stderr: failure.stderr ?? String(error), status: typeof failure.code === "number" ? failure.code : 1 };
+  }
+}
 
 type NpmAuditVia = {
   source?: unknown;
