@@ -109,6 +109,64 @@ export function parseNpmAuditJson(input: unknown): SecurityFinding[] {
   return findings;
 }
 
+type PipAuditVulnerability = {
+  id?: unknown;
+  aliases?: unknown;
+  fix_versions?: unknown;
+  description?: unknown;
+  severity?: unknown;
+};
+
+type PipAuditPackage = {
+  name?: unknown;
+  version?: unknown;
+  vulns?: unknown;
+};
+
+export function parsePipAuditJson(input: unknown): SecurityFinding[] {
+  if (!Array.isArray(input)) return [];
+  const findings: SecurityFinding[] = [];
+
+  for (const rawPackage of input) {
+    if (!isRecord(rawPackage)) continue;
+    const packageInfo = rawPackage as PipAuditPackage;
+    if (typeof packageInfo.name !== "string" || typeof packageInfo.version !== "string" || !Array.isArray(packageInfo.vulns)) continue;
+    for (const rawVulnerability of packageInfo.vulns) {
+      if (!isRecord(rawVulnerability)) continue;
+      const vulnerability = rawVulnerability as PipAuditVulnerability;
+      const advisoryId = typeof vulnerability.id === "string" ? vulnerability.id : firstString(vulnerability.aliases);
+      if (!advisoryId) continue;
+      const fixedVersion = firstString(vulnerability.fix_versions);
+      const title = typeof vulnerability.description === "string" ? vulnerability.description : undefined;
+      findings.push({
+        id: `dependency-vulnerability:${packageInfo.name}:${advisoryId}`,
+        ruleId: "dependency-vulnerability",
+        language: "python",
+        severity: normalizeSeverity(vulnerability.severity) ?? "medium",
+        confidence: "high",
+        filePath: "requirements.txt",
+        lineNumber: 1,
+        source: "dependency",
+        sink: "package",
+        flow: "dependency -> vulnerable package",
+        message: `依存パッケージ ${packageInfo.name} に既知の脆弱性があります。${title ? `概要: ${title}。` : ""}`,
+        remediation: fixedVersion ? `${packageInfo.name}を${fixedVersion}以降へ更新してください。` : `${packageInfo.name}の修正版を確認して更新してください。`,
+        category: "general-vulnerability",
+        dependencyName: packageInfo.name,
+        advisoryId,
+        affectedRange: `==${packageInfo.version}`,
+        fixedVersion,
+      });
+    }
+  }
+
+  return findings;
+}
+
+function firstString(value: unknown): string | undefined {
+  return Array.isArray(value) ? value.find((item): item is string => typeof item === "string") : undefined;
+}
+
 function firstAdvisory(value: unknown): { source?: string; title?: string; url?: string } | undefined {
   if (!Array.isArray(value)) return undefined;
   const item = value.find((candidate): candidate is NpmAuditVia => isRecord(candidate) && (typeof candidate.source === "string" || typeof candidate.url === "string"));

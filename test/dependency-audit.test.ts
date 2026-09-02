@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseNpmAuditJson, runNpmAudit } from "../src/dependency-audit.js";
+import { parseNpmAuditJson, parsePipAuditJson, runNpmAudit } from "../src/dependency-audit.js";
 
 describe("dependency audit", () => {
   it("converts npm audit vulnerabilities into common findings", () => {
@@ -59,5 +59,28 @@ describe("dependency audit", () => {
 
     expect(result.findings).toEqual([]);
     expect(result.analysisIssue).toEqual(expect.objectContaining({ kind: "parse-error", filePath: "package-lock.json" }));
+  });
+
+  it("converts pip-audit JSON into common findings", () => {
+    const findings = parsePipAuditJson([
+      {
+        name: "jinja2",
+        version: "3.1.2",
+        vulns: [{ id: "CVE-2024-22195", fix_versions: ["3.1.3"], description: "sandbox escape" }],
+      },
+    ]);
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "dependency-vulnerability",
+        language: "python",
+        filePath: "requirements.txt",
+        dependencyName: "jinja2",
+        advisoryId: "CVE-2024-22195",
+        affectedRange: "==3.1.2",
+        fixedVersion: "3.1.3",
+        severity: "medium",
+      }),
+    ]);
   });
 });
