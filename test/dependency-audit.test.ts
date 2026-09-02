@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseComposerAuditJson, parseNpmAuditJson, parsePipAuditJson, runComposerAudit, runNpmAudit, runPipAudit } from "../src/dependency-audit.js";
+import { parseComposerAuditJson, parseNpmAuditJson, parseOsvAuditJson, parsePipAuditJson, runComposerAudit, runNpmAudit, runPipAudit } from "../src/dependency-audit.js";
 
 describe("dependency audit", () => {
   it("converts npm audit vulnerabilities into common findings", () => {
@@ -144,5 +144,30 @@ describe("dependency audit", () => {
 
     expect(result.findings).toEqual([]);
     expect(result.analysisIssue).toEqual(expect.objectContaining({ kind: "parser-unavailable", filePath: "composer.lock" }));
+  });
+
+  it("converts Pub OSV audit results into common findings", () => {
+    const findings = parseOsvAuditJson({
+      results: [{
+        package: { name: "http", version: "1.2.0", ecosystem: "Pub" },
+        vulnerabilities: [{
+          id: "GHSA-8v7x-j7fc-8m3m",
+          summary: "Improper validation",
+          affected: [{ ranges: [{ events: [{ introduced: "0" }, { fixed: "1.2.1" }] }] }],
+        }],
+      }],
+    });
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "dependency-vulnerability",
+        language: "dart",
+        filePath: "pubspec.lock",
+        dependencyName: "http",
+        advisoryId: "GHSA-8v7x-j7fc-8m3m",
+        affectedRange: "<1.2.1",
+        fixedVersion: "1.2.1",
+      }),
+    ]);
   });
 });

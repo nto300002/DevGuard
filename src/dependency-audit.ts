@@ -278,6 +278,59 @@ export function parseComposerAuditJson(input: unknown): SecurityFinding[] {
   return findings;
 }
 
+export function parseOsvAuditJson(input: unknown): SecurityFinding[] {
+  if (!isRecord(input) || !Array.isArray(input.results)) return [];
+  const findings: SecurityFinding[] = [];
+
+  for (const rawResult of input.results) {
+    if (!isRecord(rawResult) || !isRecord(rawResult.package) || !Array.isArray(rawResult.vulnerabilities)) continue;
+    const packageInfo = rawResult.package;
+    if (typeof packageInfo.name !== "string" || typeof packageInfo.version !== "string") continue;
+    for (const rawVulnerability of rawResult.vulnerabilities) {
+      if (!isRecord(rawVulnerability) || typeof rawVulnerability.id !== "string") continue;
+      const fixedVersion = osvFixedVersion(rawVulnerability.affected);
+      const affectedRange = fixedVersion ? `<${fixedVersion}` : `==${packageInfo.version}`;
+      const severityValue = isRecord(rawVulnerability.database_specific) ? rawVulnerability.database_specific.severity : undefined;
+      const summary = typeof rawVulnerability.summary === "string" ? rawVulnerability.summary : undefined;
+      findings.push({
+        id: `dependency-vulnerability:${packageInfo.name}:${rawVulnerability.id}`,
+        ruleId: "dependency-vulnerability",
+        language: "dart",
+        severity: normalizeSeverity(severityValue) ?? "medium",
+        confidence: "high",
+        filePath: "pubspec.lock",
+        lineNumber: 1,
+        source: "dependency",
+        sink: "package",
+        flow: "dependency -> vulnerable package",
+        message: `依存パッケージ ${packageInfo.name} に既知の脆弱性があります。${summary ? `概要: ${summary}。` : ""}`,
+        remediation: fixedVersion ? `${packageInfo.name}を${fixedVersion}以降へ更新してください。` : `${packageInfo.name}の修正版を確認して更新してください。`,
+        category: "general-vulnerability",
+        dependencyName: packageInfo.name,
+        advisoryId: rawVulnerability.id,
+        affectedRange,
+        fixedVersion,
+      });
+    }
+  }
+
+  return findings;
+}
+
+function osvFixedVersion(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  for (const rawAffected of value) {
+    if (!isRecord(rawAffected) || !Array.isArray(rawAffected.ranges)) continue;
+    for (const rawRange of rawAffected.ranges) {
+      if (!isRecord(rawRange) || !Array.isArray(rawRange.events)) continue;
+      for (const rawEvent of rawRange.events) {
+        if (isRecord(rawEvent) && typeof rawEvent.fixed === "string") return rawEvent.fixed;
+      }
+    }
+  }
+  return undefined;
+}
+
 function firstString(value: unknown): string | undefined {
   return Array.isArray(value) ? value.find((item): item is string => typeof item === "string") : undefined;
 }
