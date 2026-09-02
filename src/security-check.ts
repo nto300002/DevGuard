@@ -5,7 +5,7 @@ import phpParser from "php-parser";
 import ts from "typescript";
 import { parseDocument } from "yaml";
 import type { SecurityAllowlistEntry } from "./config.js";
-import { runComposerAudit, runNpmAudit, runPipAudit } from "./dependency-audit.js";
+import { runComposerAudit, runNpmAudit, runPipAudit, runPubAudit } from "./dependency-audit.js";
 import type { DiffLine } from "./git-diff.js";
 
 export type SecurityLanguage = "typescript" | "python" | "php" | "dart" | "yaml" | "dockerfile" | "unknown";
@@ -149,6 +149,15 @@ export async function scanRepositoryDetailed(root: string, options: SecurityRepo
     if (dependencyScan.analysisIssue) analysisIssues.push(dependencyScan.analysisIssue);
   } catch {
     // composer.lock is optional; source scanning continues when it is absent.
+  }
+
+  try {
+    await access(path.join(root, "pubspec.lock"));
+    const dependencyScan = await runPubAudit(root);
+    findings.push(...dependencyScan.findings);
+    if (dependencyScan.analysisIssue) analysisIssues.push(dependencyScan.analysisIssue);
+  } catch {
+    // pubspec.lock is optional; source scanning continues when it is absent.
   }
 
   for (const filePath of files) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseComposerAuditJson, parseNpmAuditJson, parseOsvAuditJson, parsePipAuditJson, runComposerAudit, runNpmAudit, runPipAudit } from "../src/dependency-audit.js";
+import { parseComposerAuditJson, parseNpmAuditJson, parseOsvAuditJson, parsePipAuditJson, runComposerAudit, runNpmAudit, runPipAudit, runPubAudit } from "../src/dependency-audit.js";
 
 describe("dependency audit", () => {
   it("converts npm audit vulnerabilities into common findings", () => {
@@ -169,5 +169,23 @@ describe("dependency audit", () => {
         fixedVersion: "1.2.1",
       }),
     ]);
+  });
+
+  it("runs dart pub audit and parses OSV JSON", async () => {
+    const result = await runPubAudit("/tmp/project", async () => ({
+      stdout: JSON.stringify({ results: [{ package: { name: "http", version: "1.2.0" }, vulnerabilities: [{ id: "CVE-2025-0001" }] }] }),
+      stderr: "",
+      status: 1,
+    }));
+
+    expect(result.analysisIssue).toBeUndefined();
+    expect(result.findings).toEqual([expect.objectContaining({ dependencyName: "http", advisoryId: "CVE-2025-0001" })]);
+  });
+
+  it("reports an analysis issue when dart is unavailable", async () => {
+    const result = await runPubAudit("/tmp/project", async () => ({ stdout: "", stderr: "dart: command not found", status: 127 }));
+
+    expect(result.findings).toEqual([]);
+    expect(result.analysisIssue).toEqual(expect.objectContaining({ kind: "parser-unavailable", filePath: "pubspec.lock" }));
   });
 });
