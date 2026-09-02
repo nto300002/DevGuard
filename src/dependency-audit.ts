@@ -20,6 +20,9 @@ export type NpmAuditResult = {
 export type PipAuditCommandResult = NpmAuditCommandResult;
 export type PipAuditCommandRunner = NpmAuditCommandRunner;
 export type PipAuditResult = NpmAuditResult;
+export type ComposerAuditCommandResult = NpmAuditCommandResult;
+export type ComposerAuditCommandRunner = NpmAuditCommandRunner;
+export type ComposerAuditResult = NpmAuditResult;
 
 export async function runNpmAudit(cwd: string, runner: NpmAuditCommandRunner = defaultNpmAuditRunner): Promise<NpmAuditResult> {
   const result = await runner(cwd);
@@ -87,6 +90,40 @@ export async function runPipAudit(cwd: string, runner: PipAuditCommandRunner = d
 async function defaultPipAuditRunner(cwd: string): Promise<PipAuditCommandResult> {
   try {
     const result = await execFileAsync("pip-audit", ["--format=json"], { cwd, maxBuffer: 4 * 1024 * 1024 });
+    return { stdout: result.stdout, stderr: result.stderr, status: 0 };
+  } catch (error) {
+    const failure = error as { stdout?: string; stderr?: string; code?: number };
+    return { stdout: failure.stdout ?? "", stderr: failure.stderr ?? String(error), status: typeof failure.code === "number" ? failure.code : 1 };
+  }
+}
+
+export async function runComposerAudit(cwd: string, runner: ComposerAuditCommandRunner = defaultComposerAuditRunner): Promise<ComposerAuditResult> {
+  const result = await runner(cwd);
+  if (!result.stdout.trim()) {
+    return {
+      findings: [],
+      analysisIssue: {
+        filePath: "composer.lock",
+        language: "php",
+        kind: result.status === 127 ? "parser-unavailable" : "parse-error",
+        message: result.stderr.trim() || `composer auditが終了コード${result.status}で終了し、JSON結果を返しませんでした。`,
+      },
+    };
+  }
+
+  try {
+    return { findings: parseComposerAuditJson(JSON.parse(result.stdout)) };
+  } catch {
+    return {
+      findings: [],
+      analysisIssue: { filePath: "composer.lock", language: "php", kind: "parse-error", message: "composer auditのJSON結果を解析できません。" },
+    };
+  }
+}
+
+async function defaultComposerAuditRunner(cwd: string): Promise<ComposerAuditCommandResult> {
+  try {
+    const result = await execFileAsync("composer", ["audit", "--format=json"], { cwd, maxBuffer: 4 * 1024 * 1024 });
     return { stdout: result.stdout, stderr: result.stderr, status: 0 };
   } catch (error) {
     const failure = error as { stdout?: string; stderr?: string; code?: number };

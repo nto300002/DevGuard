@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseComposerAuditJson, parseNpmAuditJson, parsePipAuditJson, runNpmAudit, runPipAudit } from "../src/dependency-audit.js";
+import { parseComposerAuditJson, parseNpmAuditJson, parsePipAuditJson, runComposerAudit, runNpmAudit, runPipAudit } from "../src/dependency-audit.js";
 
 describe("dependency audit", () => {
   it("converts npm audit vulnerabilities into common findings", () => {
@@ -126,5 +126,23 @@ describe("dependency audit", () => {
         severity: "medium",
       }),
     ]);
+  });
+
+  it("runs composer audit and parses JSON despite a vulnerability exit code", async () => {
+    const result = await runComposerAudit("/tmp/project", async () => ({
+      stdout: JSON.stringify({ advisories: { "symfony/http-kernel": [{ advisoryId: "CVE-2024-50340" }] } }),
+      stderr: "",
+      status: 1,
+    }));
+
+    expect(result.analysisIssue).toBeUndefined();
+    expect(result.findings).toEqual([expect.objectContaining({ dependencyName: "symfony/http-kernel", advisoryId: "CVE-2024-50340" })]);
+  });
+
+  it("reports an analysis issue when composer is unavailable", async () => {
+    const result = await runComposerAudit("/tmp/project", async () => ({ stdout: "", stderr: "composer: command not found", status: 127 }));
+
+    expect(result.findings).toEqual([]);
+    expect(result.analysisIssue).toEqual(expect.objectContaining({ kind: "parser-unavailable", filePath: "composer.lock" }));
   });
 });
