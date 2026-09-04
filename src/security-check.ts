@@ -35,6 +35,7 @@ export type SecurityFinding = {
   suppressionOwner?: string;
   suppressionExpired?: boolean;
   baseline?: boolean;
+  historyCommit?: string;
 };
 
 export type SecurityAnalysisIssue = {
@@ -160,6 +161,7 @@ export function scanText(filePath: string, content: string, language: SecurityLa
 export function scanSecretPatterns(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath)): SecurityFinding[] {
   const findings: SecurityFinding[] = [];
   for (const { ruleId, label, pattern } of SECRET_FORMAT_PATTERNS) {
+    pattern.lastIndex = 0;
     for (const match of content.matchAll(pattern)) {
       const offset = match.index ?? 0;
       const lineNumber = content.slice(0, offset).split(/\r?\n/).length;
@@ -198,6 +200,42 @@ export function scanSecretPatterns(filePath: string, content: string, language: 
     }));
   }
   return dedupeFindings(findings);
+}
+
+export type GitHistorySecretCommandResult = { stdout: string; stderr: string; status: number };
+export type GitHistorySecretRunner = (gitRoot: string) => Promise<GitHistorySecretCommandResult>;
+
+export async function scanGitHistorySecrets(gitRoot: string, runner: GitHistorySecretRunner = defaultGitHistorySecretRunner): Promise<SecurityScanTextResult> {
+  const result = await runner(gitRoot);
+  if (result.status !== 0 && !result.stdout.trim()) {
+    return {
+      findings: [],
+      analysisIssues: [{ filePath: ".git/history", language: "unknown", kind: "parser-unavailable", message: result.stderr.trim() || `Git履歴検査が終了コード${result.status}で終了しました。` }],
+    };
+  }
+
+  const findings: SecurityFinding[] = [];
+  let currentFile: string | undefined;
+  let currentCommit: string | undefined;
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const commit = /^commit\s+([0-9a-f]+)/i.exec(line);
+    if (commit) currentCommit = commit[1];
+    const diff = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
+    if (diff) currentFile = normalizePath(diff[2] ?? diff[1] ?? "");
+    if (!currentFile || !/^[+-](?![+-])/.test(line)) continue;
+    const lineFindings = scanSecretPatterns(currentFile, line.slice(1));
+    findings.push(...lineFindings.map((finding) => ({
+      ...finding,
+      id: `${finding.id}:${currentCommit ?? "unknown"}`,
+      historyCommit: currentCommit,
+    })));
+  }
+  return { findings: dedupeFindings(findings), analysisIssues: [] };
+}
+
+async function defaultGitHistorySecretRunner(gitRoot: string): Promise<GitHistorySecretCommandResult> {
+  const result = spawnSync("git", ["log", "--all", "-p", "--format=fuller", "--"], { cwd: gitRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", status: result.status ?? 1 };
 }
 
 function shannonEntropy(value: string): number {

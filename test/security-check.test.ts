@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanRepository, scanRepositoryDetailed, scanSecretPatterns, scanText, scanTextDetailed } from "../src/security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanGitHistorySecrets, scanRepository, scanRepositoryDetailed, scanSecretPatterns, scanText, scanTextDetailed } from "../src/security-check.js";
 
 describe("security flow scan", () => {
   it("detects common secret formats without exposing their values", () => {
@@ -47,6 +47,25 @@ describe("security flow scan", () => {
     expect(findings).toEqual([
       expect.objectContaining({ ruleId: "secret-stripe-key", severity: "high", source: "secret" }),
     ]);
+  });
+
+  it("detects masked Secret formats remaining in Git history", async () => {
+    const result = await scanGitHistorySecrets("/tmp/project", async () => ({
+      stdout: "commit abc123\ndiff --git a/src/config.ts b/src/config.ts\n+const key = 'sk_live_1234567890abcdef';\n",
+      stderr: "",
+      status: 0,
+    }));
+
+    expect(result.analysisIssue).toBeUndefined();
+    expect(result.findings).toEqual([expect.objectContaining({ ruleId: "secret-stripe-key", filePath: "src/config.ts" })]);
+    expect(JSON.stringify(result.findings)).not.toContain("sk_live_1234567890abcdef");
+  });
+
+  it("reports Git history inspection failures without throwing", async () => {
+    const result = await scanGitHistorySecrets("/tmp/project", async () => ({ stdout: "", stderr: "git: repository unavailable", status: 128 }));
+
+    expect(result.findings).toEqual([]);
+    expect(result.analysisIssues).toEqual([expect.objectContaining({ kind: "parser-unavailable", filePath: ".git/history" })]);
   });
 
   it("detects TypeScript environment values flowing into logs", () => {
