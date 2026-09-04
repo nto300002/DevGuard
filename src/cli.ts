@@ -128,6 +128,7 @@ export function formatSecurityCheckResult(findings: SecurityFinding[], analysisI
     lines.push(`  カテゴリ: ${finding.category}`);
     lines.push(`  判定: ${finding.classification} / 優先度: ${finding.priority} / Scope: ${finding.codeScope}`);
     lines.push(`  判定理由: ${finding.classificationReason}`);
+    if (finding.executionContext || finding.sourceKind || finding.sinkKind) lines.push(`  Context: ${finding.executionContext ?? "unknown"} / Source: ${finding.sourceKind ?? "unknown"} / Sink: ${finding.sinkKind ?? "unknown"}`);
     if (finding.cwe || finding.owaspCategory) lines.push(`  CWE/OWASP: ${finding.cwe ?? "-"} / ${finding.owaspCategory ?? "-"}`);
     lines.push(`  内容: ${finding.message}`);
     lines.push(`  対応: ${finding.remediation}`);
@@ -192,6 +193,9 @@ export function formatSecurityCheckSarif(findings: SecurityFinding[], analysisIs
       classification: finding.classification,
       codeScope: finding.codeScope,
       classificationReason: finding.classificationReason,
+      ...(finding.executionContext ? { executionContext: finding.executionContext } : {}),
+      ...(finding.sourceKind ? { sourceKind: finding.sourceKind } : {}),
+      ...(finding.sinkKind ? { sinkKind: finding.sinkKind } : {}),
       ...(finding.cwe ? { cwe: finding.cwe } : {}),
       ...(finding.owaspCategory ? { owaspCategory: finding.owaspCategory } : {}),
       ...(finding.suppressed ? { suppressed: true } : {}),

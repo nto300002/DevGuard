@@ -17,6 +17,9 @@ export type SecurityScanMode = "all" | SecurityFindingCategory;
 export type SecurityFindingClassification = "confirmed-risk" | "likely-false-positive" | "contextual-misclassification" | "scope-noise" | "needs-review";
 export type SecurityCodeScope = "production" | "test" | "script" | "playground" | "docs-tooling";
 export type SecurityPriority = "p0" | "p1" | "p2" | "p3";
+export type SecurityExecutionContext = "browser" | "server" | "unknown";
+export type SecuritySourceKind = "user-input" | "environment-or-fixed-value" | "secret" | "exception" | "dependency" | "unknown";
+export type SecuritySinkKind = "browser-client-fetch" | "server-http-client" | "database" | "logger" | "storage-write" | "storage-read" | "storage-remove" | "unknown";
 
 export type SecurityFinding = {
   id: string;
@@ -36,6 +39,9 @@ export type SecurityFinding = {
   classification: SecurityFindingClassification;
   codeScope: SecurityCodeScope;
   classificationReason: string;
+  executionContext?: SecurityExecutionContext;
+  sourceKind?: SecuritySourceKind;
+  sinkKind?: SecuritySinkKind;
   cwe?: string;
   owaspCategory?: string;
   suppressed?: boolean;
@@ -725,7 +731,7 @@ function deploymentFinding(filePath: string, lineNumber: number, flow: string): 
   });
 }
 
-function createFinding(input: Omit<SecurityFinding, "id" | "confidence" | "category" | "priority" | "classification" | "codeScope" | "classificationReason"> & { confidence?: SecurityFinding["confidence"]; category?: SecurityFindingCategory }): SecurityFinding {
+function createFinding(input: Omit<SecurityFinding, "id" | "confidence" | "category" | "priority" | "classification" | "codeScope" | "classificationReason" | "executionContext" | "sourceKind" | "sinkKind"> & { confidence?: SecurityFinding["confidence"]; category?: SecurityFindingCategory }): SecurityFinding {
   const context = classifyFinding(input);
   return {
     ...input,
@@ -736,20 +742,42 @@ function createFinding(input: Omit<SecurityFinding, "id" | "confidence" | "categ
   };
 }
 
-function classifyFinding(input: Pick<SecurityFinding, "filePath" | "ruleId" | "severity" | "source"> & { confidence?: SecurityFinding["confidence"] }): Pick<SecurityFinding, "priority" | "classification" | "codeScope" | "classificationReason"> {
+function classifyFinding(input: Pick<SecurityFinding, "filePath" | "ruleId" | "severity" | "source" | "sink" | "language"> & { confidence?: SecurityFinding["confidence"] }): Pick<SecurityFinding, "priority" | "classification" | "codeScope" | "classificationReason" | "executionContext" | "sourceKind" | "sinkKind"> {
   const codeScope = classifyCodeScope(input.filePath);
+  const browserHttp = input.ruleId === "general-ssrf" && /(?:^|\/)lib\/http\.(?:ts|tsx|js|jsx)$/.test(input.filePath.replaceAll("\\", "/"));
   if (codeScope !== "production") {
-    return { codeScope, priority: "p3", classification: "scope-noise", classificationReason: "本番コード以外のスコープです。" };
+    return { codeScope, priority: "p3", classification: "scope-noise", classificationReason: "本番コード以外のスコープです。", sourceKind: sourceKindFor(input.source), sinkKind: sinkKindFor(input.sink), executionContext: browserHttp ? "browser" : "unknown" };
   }
-  if (input.ruleId === "general-ssrf" && /(?:^|\/)lib\/http\.(?:ts|tsx|js|jsx)$/.test(input.filePath.replaceAll("\\", "/"))) {
-    return { codeScope, priority: "p2", classification: "contextual-misclassification", classificationReason: "フロントエンドHTTPラッパーのため、サーバーSSRFとは異なる実行コンテキストです。" };
+  if (browserHttp) {
+    return { codeScope, priority: "p2", classification: "contextual-misclassification", classificationReason: "フロントエンドHTTPラッパーのため、サーバーSSRFとは異なる実行コンテキストです。", executionContext: "browser", sourceKind: "environment-or-fixed-value", sinkKind: "browser-client-fetch" };
   }
   return {
     codeScope,
     priority: input.severity === "high" ? "p1" : input.severity === "medium" ? "p2" : "p3",
     classification: input.confidence === "high" ? "confirmed-risk" : "needs-review",
     classificationReason: input.confidence === "high" ? "入力源から危険Sinkへの到達が高信頼で検出されました。" : "入力源と安全条件の追加確認が必要です。",
+    executionContext: input.ruleId === "general-ssrf" ? "server" : "unknown",
+    sourceKind: sourceKindFor(input.source),
+    sinkKind: sinkKindFor(input.sink),
   };
+}
+
+function sourceKindFor(source: SecuritySource): SecuritySourceKind {
+  if (source === "user-input") return "user-input";
+  if (source === "environment") return "environment-or-fixed-value";
+  if (source === "secret" || source === "sensitive-value") return "secret";
+  if (source === "exception") return "exception";
+  if (source === "dependency") return "dependency";
+  return "unknown";
+}
+
+function sinkKindFor(sink: SecuritySink): SecuritySinkKind {
+  if (sink === "http-client") return "server-http-client";
+  if (sink === "logger") return "logger";
+  if (sink === "storage") return "storage-write";
+  if (sink === "package") return "unknown";
+  if (sink === "sql") return "database";
+  return "unknown";
 }
 
 function classifyCodeScope(filePath: string): SecurityCodeScope {

@@ -59,6 +59,22 @@ describe("security flow scan", () => {
         priority: "p2",
         classification: "contextual-misclassification",
         codeScope: "production",
+        executionContext: "browser",
+        sourceKind: "environment-or-fixed-value",
+        sinkKind: "browser-client-fetch",
+      }),
+    ]);
+  });
+
+  it("classifies server-side HTTP requests separately from browser fetch", () => {
+    const findings = scanText("app/client.py", "import requests\nrequests.get(request.url)\n", "python");
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "general-ssrf",
+        executionContext: "server",
+        sourceKind: "user-input",
+        sinkKind: "server-http-client",
       }),
     ]);
   });
