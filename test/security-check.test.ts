@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanGitHistorySecrets, scanRepository, scanRepositoryDetailed, scanSecretPatterns, scanText, scanTextDetailed } from "../src/security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanDiffLines, scanGitHistorySecrets, scanRepository, scanRepositoryDetailed, scanSecretPatterns, scanText, scanTextDetailed } from "../src/security-check.js";
 
 describe("security flow scan", () => {
   it("detects common secret formats without exposing their values", () => {
@@ -59,6 +59,14 @@ describe("security flow scan", () => {
     expect(result.analysisIssue).toBeUndefined();
     expect(result.findings).toEqual([expect.objectContaining({ ruleId: "secret-stripe-key", filePath: "src/config.ts" })]);
     expect(JSON.stringify(result.findings)).not.toContain("sk_live_1234567890abcdef");
+  });
+
+  it("detects Secret formats on added Git diff lines", () => {
+    const findings = scanDiffLines([
+      { type: "added", filePath: "src/config.ts", lineNumber: 4, content: "const key = 'sk_live_1234567890abcdef';" },
+    ]);
+
+    expect(findings).toEqual([expect.objectContaining({ ruleId: "secret-stripe-key", filePath: "src/config.ts", lineNumber: 4 })]);
   });
 
   it("reports Git history inspection failures without throwing", async () => {
