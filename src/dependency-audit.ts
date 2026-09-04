@@ -211,6 +211,7 @@ export function parseNpmAuditJson(input: unknown): SecurityFinding[] {
       message: `依存パッケージ ${dependencyName} に既知の脆弱性があります。${advisory?.title ? `概要: ${advisory.title}。` : ""}`,
       remediation: fixedVersion ? `${dependencyName}を${fixedVersion}以降へ更新してください。` : `${dependencyName}の修正版を確認して更新してください。`,
       category: "general-vulnerability",
+      ...dependencyFindingContext(severity),
       dependencyName,
       advisoryId,
       affectedRange: typeof vulnerability.range === "string" ? vulnerability.range : undefined,
@@ -250,11 +251,12 @@ export function parsePipAuditJson(input: unknown): SecurityFinding[] {
       if (!advisoryId) continue;
       const fixedVersion = firstString(vulnerability.fix_versions);
       const title = typeof vulnerability.description === "string" ? vulnerability.description : undefined;
+      const severity = normalizeSeverity(vulnerability.severity) ?? "medium";
       findings.push({
         id: `dependency-vulnerability:${packageInfo.name}:${advisoryId}`,
         ruleId: "dependency-vulnerability",
         language: "python",
-        severity: normalizeSeverity(vulnerability.severity) ?? "medium",
+        severity,
         confidence: "high",
         filePath: "requirements.txt",
         lineNumber: 1,
@@ -264,6 +266,7 @@ export function parsePipAuditJson(input: unknown): SecurityFinding[] {
         message: `依存パッケージ ${packageInfo.name} に既知の脆弱性があります。${title ? `概要: ${title}。` : ""}`,
         remediation: fixedVersion ? `${packageInfo.name}を${fixedVersion}以降へ更新してください。` : `${packageInfo.name}の修正版を確認して更新してください。`,
         category: "general-vulnerability",
+        ...dependencyFindingContext(severity),
         dependencyName: packageInfo.name,
         advisoryId,
         affectedRange: `==${packageInfo.version}`,
@@ -290,11 +293,12 @@ export function parseComposerAuditJson(input: unknown): SecurityFinding[] {
       const affectedRange = typeof rawAdvisory.affectedVersions === "string" ? rawAdvisory.affectedVersions : undefined;
       const title = typeof rawAdvisory.title === "string" ? rawAdvisory.title : undefined;
       const fixedVersion = typeof rawAdvisory.fixedVersions === "string" ? rawAdvisory.fixedVersions : firstString(rawAdvisory.fixedVersions);
+      const severity = normalizeSeverity(rawAdvisory.severity) ?? "medium";
       findings.push({
         id: `dependency-vulnerability:${dependencyName}:${advisoryId}`,
         ruleId: "dependency-vulnerability",
         language: "php",
-        severity: normalizeSeverity(rawAdvisory.severity) ?? "medium",
+        severity,
         confidence: "high",
         filePath: "composer.lock",
         lineNumber: 1,
@@ -304,6 +308,7 @@ export function parseComposerAuditJson(input: unknown): SecurityFinding[] {
         message: `依存パッケージ ${dependencyName} に既知の脆弱性があります。${title ? `概要: ${title}。` : ""}`,
         remediation: fixedVersion ? `${dependencyName}を${fixedVersion}以降へ更新してください。` : `${dependencyName}の修正版を確認して更新してください。`,
         category: "general-vulnerability",
+        ...dependencyFindingContext(severity),
         dependencyName,
         advisoryId,
         affectedRange,
@@ -328,12 +333,13 @@ export function parseOsvAuditJson(input: unknown): SecurityFinding[] {
       const fixedVersion = osvFixedVersion(rawVulnerability.affected);
       const affectedRange = fixedVersion ? `<${fixedVersion}` : `==${packageInfo.version}`;
       const severityValue = isRecord(rawVulnerability.database_specific) ? rawVulnerability.database_specific.severity : undefined;
+      const severity = normalizeSeverity(severityValue) ?? "medium";
       const summary = typeof rawVulnerability.summary === "string" ? rawVulnerability.summary : undefined;
       findings.push({
         id: `dependency-vulnerability:${packageInfo.name}:${rawVulnerability.id}`,
         ruleId: "dependency-vulnerability",
         language: "dart",
-        severity: normalizeSeverity(severityValue) ?? "medium",
+        severity,
         confidence: "high",
         filePath: "pubspec.lock",
         lineNumber: 1,
@@ -343,6 +349,7 @@ export function parseOsvAuditJson(input: unknown): SecurityFinding[] {
         message: `依存パッケージ ${packageInfo.name} に既知の脆弱性があります。${summary ? `概要: ${summary}。` : ""}`,
         remediation: fixedVersion ? `${packageInfo.name}を${fixedVersion}以降へ更新してください。` : `${packageInfo.name}の修正版を確認して更新してください。`,
         category: "general-vulnerability",
+        ...dependencyFindingContext(severity),
         dependencyName: packageInfo.name,
         advisoryId: rawVulnerability.id,
         affectedRange,
@@ -366,6 +373,15 @@ function osvFixedVersion(value: unknown): string | undefined {
     }
   }
   return undefined;
+}
+
+function dependencyFindingContext(severity: SecuritySeverity): Pick<SecurityFinding, "priority" | "classification" | "codeScope" | "classificationReason"> {
+  return {
+    priority: severity === "high" ? "p1" : severity === "medium" ? "p2" : "p3",
+    classification: "confirmed-risk",
+    codeScope: "production",
+    classificationReason: "依存パッケージの既知脆弱性が監査結果で確認されました。",
+  };
 }
 
 function firstString(value: unknown): string | undefined {
