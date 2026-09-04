@@ -417,7 +417,7 @@ function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityS
 
     if (ts.isCallExpression(node)) {
       const sink = typeScriptSink(node.expression);
-      const source = sourceForTypeScriptCall(node, tainted);
+      const source = sink === "storage" && storageSinkKind(node.expression) !== "storage-write" ? undefined : sourceForTypeScriptCall(node, tainted);
       if (sink && source) {
         const lineNumber = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
         const isUrl = sink === "url";
@@ -433,6 +433,7 @@ function scanTypeScriptAstDetailed(filePath: string, content: string): SecurityS
           flow: `${source} -> ${sink}`,
           message: `${formatSource(source)}が${formatSink(sink)}へ流入する可能性があります。`,
           remediation: remediationForSink(sink),
+          ...(sink === "storage" ? { sinkKind: storageSinkKind(node.expression) } : {}),
         }));
       }
     }
@@ -475,6 +476,14 @@ function typeScriptSink(expression: ts.Expression): SecuritySink | undefined {
   if (/^(?:Response|NextResponse|res)\.(?:json|redirect)$/.test(text)) return "response";
   if (/^(?:URL|URLSearchParams)\b/.test(text) || /^(?:redirect|location)$/.test(text)) return "url";
   return undefined;
+}
+
+function storageSinkKind(expression: ts.Expression): SecuritySinkKind {
+  const method = /\.(setItem|getItem|removeItem)$/.exec(expression.getText())?.[1];
+  if (method === "setItem") return "storage-write";
+  if (method === "getItem") return "storage-read";
+  if (method === "removeItem") return "storage-remove";
+  return "unknown";
 }
 
 function scriptKindForPath(filePath: string): ts.ScriptKind {
@@ -731,7 +740,7 @@ function deploymentFinding(filePath: string, lineNumber: number, flow: string): 
   });
 }
 
-function createFinding(input: Omit<SecurityFinding, "id" | "confidence" | "category" | "priority" | "classification" | "codeScope" | "classificationReason" | "executionContext" | "sourceKind" | "sinkKind"> & { confidence?: SecurityFinding["confidence"]; category?: SecurityFindingCategory }): SecurityFinding {
+function createFinding(input: Omit<SecurityFinding, "id" | "confidence" | "category" | "priority" | "classification" | "codeScope" | "classificationReason" | "executionContext" | "sourceKind" | "sinkKind"> & { confidence?: SecurityFinding["confidence"]; category?: SecurityFindingCategory; executionContext?: SecurityExecutionContext; sourceKind?: SecuritySourceKind; sinkKind?: SecuritySinkKind }): SecurityFinding {
   const context = classifyFinding(input);
   return {
     ...input,
@@ -742,11 +751,11 @@ function createFinding(input: Omit<SecurityFinding, "id" | "confidence" | "categ
   };
 }
 
-function classifyFinding(input: Pick<SecurityFinding, "filePath" | "ruleId" | "severity" | "source" | "sink" | "language"> & { confidence?: SecurityFinding["confidence"] }): Pick<SecurityFinding, "priority" | "classification" | "codeScope" | "classificationReason" | "executionContext" | "sourceKind" | "sinkKind"> {
+function classifyFinding(input: Pick<SecurityFinding, "filePath" | "ruleId" | "severity" | "source" | "sink" | "language"> & { confidence?: SecurityFinding["confidence"]; executionContext?: SecurityExecutionContext; sourceKind?: SecuritySourceKind; sinkKind?: SecuritySinkKind }): Pick<SecurityFinding, "priority" | "classification" | "codeScope" | "classificationReason" | "executionContext" | "sourceKind" | "sinkKind"> {
   const codeScope = classifyCodeScope(input.filePath);
   const browserHttp = input.ruleId === "general-ssrf" && /(?:^|\/)lib\/http\.(?:ts|tsx|js|jsx)$/.test(input.filePath.replaceAll("\\", "/"));
   if (codeScope !== "production") {
-    return { codeScope, priority: "p3", classification: "scope-noise", classificationReason: "本番コード以外のスコープです。", sourceKind: sourceKindFor(input.source), sinkKind: sinkKindFor(input.sink), executionContext: browserHttp ? "browser" : "unknown" };
+    return { codeScope, priority: "p3", classification: "scope-noise", classificationReason: "本番コード以外のスコープです。", sourceKind: input.sourceKind ?? sourceKindFor(input.source), sinkKind: input.sinkKind ?? sinkKindFor(input.sink), executionContext: input.executionContext ?? (browserHttp ? "browser" : "unknown") };
   }
   if (browserHttp) {
     return { codeScope, priority: "p2", classification: "contextual-misclassification", classificationReason: "フロントエンドHTTPラッパーのため、サーバーSSRFとは異なる実行コンテキストです。", executionContext: "browser", sourceKind: "environment-or-fixed-value", sinkKind: "browser-client-fetch" };
@@ -756,9 +765,9 @@ function classifyFinding(input: Pick<SecurityFinding, "filePath" | "ruleId" | "s
     priority: input.severity === "high" ? "p1" : input.severity === "medium" ? "p2" : "p3",
     classification: input.confidence === "high" ? "confirmed-risk" : "needs-review",
     classificationReason: input.confidence === "high" ? "入力源から危険Sinkへの到達が高信頼で検出されました。" : "入力源と安全条件の追加確認が必要です。",
-    executionContext: input.ruleId === "general-ssrf" ? "server" : "unknown",
-    sourceKind: sourceKindFor(input.source),
-    sinkKind: sinkKindFor(input.sink),
+    sourceKind: input.sourceKind ?? sourceKindFor(input.source),
+    sinkKind: input.sinkKind ?? sinkKindFor(input.sink),
+    ...(input.executionContext ? { executionContext: input.executionContext } : { executionContext: input.ruleId === "general-ssrf" ? "server" as const : "unknown" as const }),
   };
 }
 

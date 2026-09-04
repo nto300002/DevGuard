@@ -79,6 +79,18 @@ describe("security flow scan", () => {
     ]);
   });
 
+  it("distinguishes storage writes from reads and removals", () => {
+    const findings = scanText(
+      "src/auth.ts",
+      'const token = process.env.ACCESS_TOKEN;\nlocalStorage.setItem("access_token", token);\nlocalStorage.getItem("access_token");\nlocalStorage.removeItem("access_token");\n',
+      "typescript",
+    );
+
+    expect(findings).toEqual([
+      expect.objectContaining({ ruleId: "secret-to-storage", lineNumber: 2, sinkKind: "storage-write" }),
+    ]);
+  });
+
   it("uses syntax-aware data flow instead of marking an unrelated log", () => {
     const findings = scanText(
       "src/auth.ts",
