@@ -36,6 +36,33 @@ describe("security flow scan", () => {
     ]);
   });
 
+  it("labels findings in scripts as scope noise without changing severity", () => {
+    const findings = scanText("scripts/maintenance.py", "import requests\nrequests.get(url)\n", "python");
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "general-ssrf",
+        severity: "high",
+        priority: "p3",
+        classification: "scope-noise",
+        codeScope: "script",
+      }),
+    ]);
+  });
+
+  it("labels frontend environment-based fetch as contextual misclassification", () => {
+    const findings = scanText("lib/http.ts", "const url = API_BASE_URL + endpoint;\nfetch(url, config);\n", "typescript");
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: "general-ssrf",
+        priority: "p2",
+        classification: "contextual-misclassification",
+        codeScope: "production",
+      }),
+    ]);
+  });
+
   it("uses syntax-aware data flow instead of marking an unrelated log", () => {
     const findings = scanText(
       "src/auth.ts",

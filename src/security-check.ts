@@ -14,6 +14,9 @@ export type SecuritySource = "environment" | "request" | "secret" | "exception" 
 export type SecuritySink = "logger" | "url" | "response" | "storage" | "deployment" | "sql" | "html" | "command" | "deserialization" | "file" | "http-client" | "package";
 export type SecurityFindingCategory = "security-flow" | "general-vulnerability";
 export type SecurityScanMode = "all" | SecurityFindingCategory;
+export type SecurityFindingClassification = "confirmed-risk" | "likely-false-positive" | "contextual-misclassification" | "scope-noise" | "needs-review";
+export type SecurityCodeScope = "production" | "test" | "script" | "playground" | "docs-tooling";
+export type SecurityPriority = "p0" | "p1" | "p2" | "p3";
 
 export type SecurityFinding = {
   id: string;
@@ -29,6 +32,10 @@ export type SecurityFinding = {
   message: string;
   remediation: string;
   category: SecurityFindingCategory;
+  priority: SecurityPriority;
+  classification: SecurityFindingClassification;
+  codeScope: SecurityCodeScope;
+  classificationReason: string;
   cwe?: string;
   owaspCategory?: string;
   suppressed?: boolean;
@@ -718,13 +725,40 @@ function deploymentFinding(filePath: string, lineNumber: number, flow: string): 
   });
 }
 
-function createFinding(input: Omit<SecurityFinding, "id" | "confidence" | "category"> & { confidence?: SecurityFinding["confidence"]; category?: SecurityFindingCategory }): SecurityFinding {
+function createFinding(input: Omit<SecurityFinding, "id" | "confidence" | "category" | "priority" | "classification" | "codeScope" | "classificationReason"> & { confidence?: SecurityFinding["confidence"]; category?: SecurityFindingCategory }): SecurityFinding {
+  const context = classifyFinding(input);
   return {
     ...input,
     id: `${input.ruleId}:${input.filePath}:${input.lineNumber}`,
     confidence: input.confidence ?? "medium",
     category: input.category ?? "security-flow",
+    ...context,
   };
+}
+
+function classifyFinding(input: Pick<SecurityFinding, "filePath" | "ruleId" | "severity" | "source"> & { confidence?: SecurityFinding["confidence"] }): Pick<SecurityFinding, "priority" | "classification" | "codeScope" | "classificationReason"> {
+  const codeScope = classifyCodeScope(input.filePath);
+  if (codeScope !== "production") {
+    return { codeScope, priority: "p3", classification: "scope-noise", classificationReason: "本番コード以外のスコープです。" };
+  }
+  if (input.ruleId === "general-ssrf" && /(?:^|\/)lib\/http\.(?:ts|tsx|js|jsx)$/.test(input.filePath.replaceAll("\\", "/"))) {
+    return { codeScope, priority: "p2", classification: "contextual-misclassification", classificationReason: "フロントエンドHTTPラッパーのため、サーバーSSRFとは異なる実行コンテキストです。" };
+  }
+  return {
+    codeScope,
+    priority: input.severity === "high" ? "p1" : input.severity === "medium" ? "p2" : "p3",
+    classification: input.confidence === "high" ? "confirmed-risk" : "needs-review",
+    classificationReason: input.confidence === "high" ? "入力源から危険Sinkへの到達が高信頼で検出されました。" : "入力源と安全条件の追加確認が必要です。",
+  };
+}
+
+function classifyCodeScope(filePath: string): SecurityCodeScope {
+  const normalized = filePath.replaceAll("\\", "/").toLowerCase();
+  if (/^(?:test|tests|e2e)\//.test(normalized) || /(?:^|\/)__tests__\//.test(normalized)) return "test";
+  if (/^(?:scripts|tools)\//.test(normalized)) return "script";
+  if (/^playground\//.test(normalized)) return "playground";
+  if (/^(?:docs|docs_specs)\//.test(normalized)) return "docs-tooling";
+  return "production";
 }
 
 function extractAssignedVariables(line: string): string[] {

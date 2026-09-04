@@ -126,6 +126,8 @@ export function formatSecurityCheckResult(findings: SecurityFinding[], analysisI
     lines.push(`- [${formatSecuritySeverity(finding.severity)}${suppression}] ${finding.ruleId}: ${finding.filePath}:${finding.lineNumber}`);
     lines.push(`  Flow: ${finding.flow}`);
     lines.push(`  カテゴリ: ${finding.category}`);
+    lines.push(`  判定: ${finding.classification} / 優先度: ${finding.priority} / Scope: ${finding.codeScope}`);
+    lines.push(`  判定理由: ${finding.classificationReason}`);
     if (finding.cwe || finding.owaspCategory) lines.push(`  CWE/OWASP: ${finding.cwe ?? "-"} / ${finding.owaspCategory ?? "-"}`);
     lines.push(`  内容: ${finding.message}`);
     lines.push(`  対応: ${finding.remediation}`);
@@ -186,6 +188,10 @@ export function formatSecurityCheckSarif(findings: SecurityFinding[], analysisIs
       sink: finding.sink,
       flow: finding.flow,
       remediation: finding.remediation,
+      priority: finding.priority,
+      classification: finding.classification,
+      codeScope: finding.codeScope,
+      classificationReason: finding.classificationReason,
       ...(finding.cwe ? { cwe: finding.cwe } : {}),
       ...(finding.owaspCategory ? { owaspCategory: finding.owaspCategory } : {}),
       ...(finding.suppressed ? { suppressed: true } : {}),
