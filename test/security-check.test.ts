@@ -69,6 +69,20 @@ describe("security flow scan", () => {
     expect(findings).toEqual([expect.objectContaining({ ruleId: "secret-stripe-key", filePath: "src/config.ts", lineNumber: 4 })]);
   });
 
+  it("applies allowlist metadata to format-based Secret findings", () => {
+    const findings = scanSecretPatterns("src/config.ts", "const example = 'sk_test_1234567890abcdef';\n", "typescript");
+    const result = applySecurityAllowlist(findings, [{
+      ruleId: "secret-stripe-key",
+      filePath: "src/config.ts",
+      reason: "documented test fixture",
+      owner: "security-team",
+      expires: "2099-12-31",
+      issue: "#27",
+    }]);
+
+    expect(result[0]).toMatchObject({ suppressed: true, suppressionReason: "documented test fixture", suppressionOwner: "security-team" });
+  });
+
   it("reports Git history inspection failures without throwing", async () => {
     const result = await scanGitHistorySecrets("/tmp/project", async () => ({ stdout: "", stderr: "git: repository unavailable", status: 128 }));
 
