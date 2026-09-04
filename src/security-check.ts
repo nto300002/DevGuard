@@ -178,7 +178,42 @@ export function scanSecretPatterns(filePath: string, content: string, language: 
       }));
     }
   }
+  for (const match of content.matchAll(/["'`]([A-Za-z0-9+/=_-]{24,})["'`]/g)) {
+    const candidate = match[1];
+    if (!candidate || shannonEntropy(candidate) < 4.2 || new Set(candidate).size < 10 || matchesKnownSecretFormat(candidate)) continue;
+    const offset = match.index ?? 0;
+    const lineNumber = content.slice(0, offset).split(/\r?\n/).length;
+    findings.push(createFinding({
+      filePath,
+      lineNumber,
+      language,
+      ruleId: "secret-high-entropy",
+      severity: "medium",
+      confidence: "medium",
+      source: "secret",
+      sink: "file",
+      flow: "high-entropy literal -> source file",
+      message: "高エントロピーのSecret候補を検出しました（値: [MASKED]）。",
+      remediation: "Secret候補が実値ならrevoke / rotateし、不要なら定数の意味を明確にしてください。",
+    }));
+  }
   return dedupeFindings(findings);
+}
+
+function shannonEntropy(value: string): number {
+  const counts = new Map<string, number>();
+  for (const character of value) counts.set(character, (counts.get(character) ?? 0) + 1);
+  return [...counts.values()].reduce((entropy, count) => {
+    const probability = count / value.length;
+    return entropy - probability * Math.log2(probability);
+  }, 0);
+}
+
+function matchesKnownSecretFormat(value: string): boolean {
+  return SECRET_FORMAT_PATTERNS.some(({ pattern }) => {
+    pattern.lastIndex = 0;
+    return pattern.test(value);
+  });
 }
 
 export function scanTextDetailed(filePath: string, content: string, language: SecurityLanguage = languageForPath(filePath)): SecurityScanTextResult {

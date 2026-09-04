@@ -32,6 +32,15 @@ describe("security flow scan", () => {
     expect(scanSecretPatterns("src/config.ts", "const message = 'hello application settings';\n", "typescript")).toEqual([]);
   });
 
+  it("detects high-entropy token-like strings without exposing their values", () => {
+    const findings = scanSecretPatterns("src/config.ts", "const token = 'aB3$not-valid';\nconst random = 'a8F2kL9mQ1xZ7pR4vN6sT0yU3wE5cD8f';\n", "typescript");
+
+    expect(findings).toEqual([
+      expect.objectContaining({ ruleId: "secret-high-entropy", lineNumber: 2, source: "secret" }),
+    ]);
+    expect(JSON.stringify(findings)).not.toContain("a8F2kL9mQ1xZ7pR4vN6sT0yU3wE5cD8f");
+  });
+
   it("includes format-based Secret findings in the repository scan path", () => {
     const findings = scanText("src/config.ts", "const stripe = 'sk_live_1234567890abcdef';\n", "typescript");
 
