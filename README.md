@@ -1,12 +1,12 @@
-# DevGuard
+# SafeCheck
 
-DevGuardは、`git commit` や `git push` の前に危険な変更を検出し、開発者が一度立ち止まって確認できるようにする TypeScript + Node.js 製のCLIツールです。
+SafeCheckは、`git commit` や `git push` の前に危険な変更を検出し、開発者が一度立ち止まって確認できるようにする TypeScript + Node.js 製のCLIツールです。
 
-AIコーディングやADHD傾向のある開発フローでは、コード品質そのものよりも「確認漏れ」が問題になりがちです。DevGuardは、commit粒度の粗さ、debug logの消し忘れ、環境変数やSecretsの確認漏れ、Issueスコープ外のDB/config変更、レビュー前確認の曖昧さをGit操作前に可視化します。
+AIコーディングやADHD傾向のある開発フローでは、コード品質そのものよりも「確認漏れ」が問題になりがちです。SafeCheckは、commit粒度の粗さ、debug logの消し忘れ、環境変数やSecretsの確認漏れ、Issueスコープ外のDB/config変更、レビュー前確認の曖昧さをGit操作前に可視化します。
 
 ## コンセプト
 
-DevGuardは、AI時代のpre-commit / pre-push型セルフレビュー支援ツールです。
+SafeCheckは、AI時代のpre-commit / pre-push型セルフレビュー支援ツールです。
 
 Copilotのようにコードを書くツールではなく、レビュー担当者を置き換えるものでもありません。Git操作の直前に差分を解析し、「何を変更したか」「何が危険か」「人間がまだ確認すべきことは何か」を説明できる状態に整えるためのガードです。
 
@@ -178,7 +178,7 @@ safecheck install-hooks
 safecheck install-hooks --include-submodules
 ```
 
-サブモジュールやGit worktreeでも正しいhook配置先を使うため、DevGuardは `git rev-parse --git-path hooks` でhookディレクトリを解決します。
+サブモジュールやGit worktreeでも正しいhook配置先を使うため、SafeCheckは `git rev-parse --git-path hooks` でhookディレクトリを解決します。
 
 導入されるhookは以下を実行します。
 
@@ -269,7 +269,7 @@ allowlistには理由・所有者・期限・追跡Issueを必須とし、期限
 }
 ```
 
-DevGuardはdefault keyword databaseで以下のセキュリティ関連パターンを検出します。
+SafeCheckはdefault keyword databaseで以下のセキュリティ関連パターンを検出します。
 
 - `console.log(user)` のような変数debug log
 - `API_KEY`、`TOKEN`、`PASSWORD`、`DATABASE_URL`、`OPENAI_API_KEY` などのsecretらしい名前
@@ -295,14 +295,14 @@ High riskのcommit findingがある場合はcommitを停止します。High risk
 
 ## Human-on-the-Loop開発フロー
 
-DevGuardはAIエージェントや自動化された開発フローを置き換えるのではなく、人間が判断すべき高リスク変更だけを止める安全弁として利用します。通常の実装・テスト・低リスク変更は自動で進め、新規High検出、認証・認可、Secrets、公開API、DB、デプロイ設定の変更で人間の確認を要求します。
+SafeCheckはAIエージェントや自動化された開発フローを置き換えるのではなく、人間が判断すべき高リスク変更だけを止める安全弁として利用します。通常の実装・テスト・低リスク変更は自動で進め、新規High検出、認証・認可、Secrets、公開API、DB、デプロイ設定の変更で人間の確認を要求します。
 
 推奨フロー:
 
 1. AIエージェントがIssueを分析し、実装とテストを作成する
 2. `pre-commit`で変更行を検査する
 3. `pre-push`でブランチ差分と新規Findingを検査する
-4. CIでDevGuard、依存関係、Secret、CodeQL、テストを実行する
+4. CIでSafeCheck、依存関係、Secret、CodeQL、テストを実行する
 5. Lowは自動通過、Mediumは警告、Highは人間の確認または修正完了まで停止する
 6. 承認された例外は理由・owner・期限・Issueを付けてallowlistまたはbaselineへ記録する
 7. StagingでAPI/E2E/DASTを実行し、結果を確認してから本番へ進める
