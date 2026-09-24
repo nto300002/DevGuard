@@ -102,6 +102,14 @@ describe("staged check units", () => {
     );
   });
 
+  it("does not duplicate GitHub Actions secret names as generic keyword findings", () => {
+    const findings = detectKeywordFindings([
+      added(".github/workflows/cd-backend.yml", 1, "TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}"),
+    ]);
+
+    expect(findings).toEqual([]);
+  });
+
   it("detects browser storage usage as a keyword risk", () => {
     const findings = detectKeywordFindings([
       added("app/page.tsx", 1, 'localStorage.setItem("theme", "dark");'),

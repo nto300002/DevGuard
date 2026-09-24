@@ -126,6 +126,7 @@ export function formatSecurityCheckResult(findings: SecurityFinding[], analysisI
     lines.push(`- [${formatSecuritySeverity(finding.severity)}${suppression}] ${finding.ruleId}: ${finding.filePath}:${finding.lineNumber}`);
     lines.push(`  Flow: ${finding.flow}`);
     lines.push(`  カテゴリ: ${finding.category}`);
+    if (finding.labels?.length) lines.push(`  ラベル: ${finding.labels.join(", ")}`);
     if (finding.cwe || finding.owaspCategory) lines.push(`  CWE/OWASP: ${finding.cwe ?? "-"} / ${finding.owaspCategory ?? "-"}`);
     lines.push(`  内容: ${finding.message}`);
     lines.push(`  対応: ${finding.remediation}`);
@@ -188,6 +189,8 @@ export function formatSecurityCheckSarif(findings: SecurityFinding[], analysisIs
       remediation: finding.remediation,
       ...(finding.cwe ? { cwe: finding.cwe } : {}),
       ...(finding.owaspCategory ? { owaspCategory: finding.owaspCategory } : {}),
+      ...(finding.secretName ? { secretName: finding.secretName } : {}),
+      ...(finding.labels?.length ? { labels: finding.labels } : {}),
       ...(finding.suppressed ? { suppressed: true } : {}),
     },
   }));

@@ -218,6 +218,30 @@ describe("security flow scan", () => {
     ]);
   });
 
+  it("separates CI test database references from other deployment secrets", () => {
+    const findings = scanText(
+      ".github/workflows/cd-backend.yml",
+      "run: gcloud builds submit --substitutions=_PROD_TEST_DATABASE_URL=${{ secrets.TEST_DATABASE_URL }},_PROD_SECRET_KEY=${{ secrets.PROD_SECRET_KEY }}\n",
+      "yaml",
+    );
+
+    expect(findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        ruleId: "secret-to-deployment",
+        secretName: "TEST_DATABASE_URL",
+        severity: "medium",
+        confidence: "low",
+        labels: ["CIテスト用途", "過剰検出の疑い"],
+      }),
+      expect.objectContaining({
+        ruleId: "secret-to-deployment",
+        secretName: "PROD_SECRET_KEY",
+        severity: "high",
+        confidence: "high",
+      }),
+    ]));
+  });
+
   it("does not flag a Cloud Run Secret Manager reference as a plain secret flow", () => {
     const findings = scanText(
       "cloudbuild.yaml",

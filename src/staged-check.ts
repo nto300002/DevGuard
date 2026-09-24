@@ -212,7 +212,7 @@ export function detectKeywordFindings(lines: DiffLine[], rules: KeywordRule[] = 
       }
 
       for (const pattern of rule.patterns) {
-        if (matchesPattern(line.content, pattern, rule)) {
+        if (!isContextualGithubSecretReference(line, rule, pattern) && matchesPattern(keywordMatchContent(line), pattern, rule)) {
           findings.push({
             type: "keyword",
             id: `keyword:${rule.id}:${line.filePath}:${line.lineNumber}:${pattern}`,
@@ -231,6 +231,17 @@ export function detectKeywordFindings(lines: DiffLine[], rules: KeywordRule[] = 
   }
 
   return findings;
+}
+
+function keywordMatchContent(line: DiffLine): string {
+  if (!line.filePath.startsWith(".github/workflows/")) return line.content;
+  return line.content.replace(/\$\{\{\s*secrets\.[A-Za-z0-9_]+\s*\}\}/gi, "").replace(/\bsecrets\.[A-Za-z0-9_]+\b/gi, "");
+}
+
+function isContextualGithubSecretReference(line: DiffLine, rule: KeywordRule, pattern: string): boolean {
+  if (rule.id !== "secrets-credentials" || line.type !== "added" || !line.filePath.startsWith(".github/workflows/")) return false;
+  const reference = /^\s*TEST_DATABASE_URL\s*:\s*\$\{\{\s*secrets\.TEST_DATABASE_URL\s*\}\}\s*$/i.test(line.content);
+  return reference && /(?:DATABASE_URL|SECRET)/i.test(pattern);
 }
 
 export function detectLogFindings(lines: DiffLine[]): LogFinding[] {

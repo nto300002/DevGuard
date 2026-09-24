@@ -36,6 +36,8 @@ export type SecurityFinding = {
   suppressionExpired?: boolean;
   baseline?: boolean;
   historyCommit?: string;
+  secretName?: string;
+  labels?: string[];
 };
 
 export type SecurityAnalysisIssue = {
@@ -739,7 +741,14 @@ function scanDeploymentTextDetailed(filePath: string, content: string, language:
       const unsafeDeploymentSink = /--(?:substitutions|update-env-vars|set-env-vars)\b|^\s*env\s*:/i.test(line);
       const safeSecretReference = /--(?:update-secrets|set-secrets)\b|secretmanager|secret-manager/i.test(line);
       if (hasSecretReference && unsafeDeploymentSink && !safeSecretReference) {
-        findings.push(deploymentFinding(filePath, index + 1, "Secret -> deployment configuration"));
+        const secretNames = [...line.matchAll(/\bsecrets\.([A-Za-z0-9_]+)\b/gi)].map((match) => match[1]).filter(Boolean);
+        if (secretNames.length === 0) {
+          findings.push(deploymentFinding(filePath, index + 1, "Secret -> deployment configuration"));
+        } else {
+          for (const secretName of [...new Set(secretNames)]) {
+            findings.push(deploymentFinding(filePath, index + 1, "Secret -> deployment configuration", secretName));
+          }
+        }
       }
     });
     return { findings: dedupeFindings(findings), analysisIssues: [] };
@@ -761,20 +770,28 @@ function scanDeploymentTextDetailed(filePath: string, content: string, language:
   return { findings: dedupeFindings(findings), analysisIssues: [] };
 }
 
-function deploymentFinding(filePath: string, lineNumber: number, flow: string): SecurityFinding {
-  return createFinding({
+function deploymentFinding(filePath: string, lineNumber: number, flow: string, secretName?: string): SecurityFinding {
+  const isCiTestDatabaseReference = filePath.startsWith(".github/workflows/")
+    && secretName === "TEST_DATABASE_URL"
+    && /(?:test|pytest|alembic|_PROD_TEST_DATABASE_URL)/i.test(flow + " " + secretName);
+  const finding = createFinding({
     filePath,
     lineNumber,
     language: filePath.toLowerCase().endsWith("dockerfile") ? "dockerfile" : "yaml",
     ruleId: "secret-to-deployment",
-    severity: "high",
-    confidence: "high",
+    severity: isCiTestDatabaseReference ? "medium" : "high",
+    confidence: isCiTestDatabaseReference ? "low" : "high",
     source: "secret",
     sink: "deployment",
     flow,
     message: "Secretがビルドまたはデプロイ設定へ直接流入しています。",
-    remediation: "Secret Manager参照など、Secret実値をコマンド引数へ渡さない方式を検討してください。",
+    remediation: isCiTestDatabaseReference
+      ? "テストDB専用Secretであること、所有者・期限・接続先を確認してください。本番Secretには適用しないでください。"
+      : "Secret Manager参照など、Secret実値をコマンド引数へ渡さない方式を検討してください。",
+    ...(secretName ? { secretName } : {}),
+    ...(isCiTestDatabaseReference ? { labels: ["CIテスト用途", "過剰検出の疑い"] } : {}),
   });
+  return secretName ? { ...finding, id: `${finding.id}:${secretName}` } : finding;
 }
 
 function createFinding(input: Omit<SecurityFinding, "id" | "confidence" | "category"> & { confidence?: SecurityFinding["confidence"]; category?: SecurityFindingCategory }): SecurityFinding {

@@ -58,6 +58,27 @@ describe("devguard CLI", () => {
     expect(json.findings[0]).not.toHaveProperty("preview");
   });
 
+  it("prints contextual labels for findings", () => {
+    const findings = [{
+      id: "finding-1",
+      ruleId: "secret-to-deployment",
+      language: "yaml",
+      severity: "medium",
+      confidence: "low",
+      filePath: ".github/workflows/cd-backend.yml",
+      lineNumber: 100,
+      source: "secret",
+      sink: "deployment",
+      flow: "Secret -> deployment configuration",
+      message: "CIテスト用Secret参照です。",
+      remediation: "用途と期限を確認してください。",
+      labels: ["CIテスト用途", "過剰検出の疑い"],
+    }] as const;
+
+    expect(formatSecurityCheckResult([...findings])).toContain("ラベル: CIテスト用途, 過剰検出の疑い");
+    expect(JSON.parse(formatSecurityCheckJson([...findings])).findings[0].labels).toEqual(["CIテスト用途", "過剰検出の疑い"]);
+  });
+
   it("formats Security Flow and General Vulnerability findings as SARIF", () => {
     const findings = [
       {
