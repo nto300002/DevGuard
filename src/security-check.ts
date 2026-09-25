@@ -4,7 +4,7 @@ import path from "node:path";
 import phpParser from "php-parser";
 import ts from "typescript";
 import { parseDocument } from "yaml";
-import type { SecurityAllowlistEntry } from "./config.js";
+import type { SecurityAllowlistEntry, WorkflowSecretAllowlistEntry } from "./config.js";
 import type { DiffLine } from "./git-diff.js";
 
 export type SecurityLanguage = "typescript" | "python" | "php" | "dart" | "yaml" | "dockerfile" | "unknown";
@@ -37,7 +37,9 @@ export type SecurityFinding = {
   baseline?: boolean;
   historyCommit?: string;
   secretName?: string;
+  envKey?: string;
   labels?: string[];
+  allowlistExpiresOn?: string;
 };
 
 export type SecurityAnalysisIssue = {
@@ -153,6 +155,25 @@ export function applySecurityAllowlist(findings: SecurityFinding[], entries: rea
       return { ...finding, suppressed: false, suppressionExpired: true };
     }
     return { ...finding, suppressed: false };
+  });
+}
+
+export function applyWorkflowSecretAllowlist(findings: SecurityFinding[], entries: readonly WorkflowSecretAllowlistEntry[], now = new Date()): SecurityFinding[] {
+  return findings.map((finding) => {
+    if (!finding.secretName || !finding.envKey || !finding.filePath.startsWith(".github/workflows/")) return finding;
+    const matching = entries.filter((entry) => entry.path === finding.filePath && entry.envKey === finding.envKey && entry.secretName === finding.secretName);
+    const active = matching.find((entry) => `${entry.expiresOn}T23:59:59.999Z` >= now.toISOString());
+    if (active) {
+      return {
+        ...finding,
+        suppressed: true,
+        suppressionReason: active.reason,
+        suppressionOwner: active.owner,
+        labels: ["CIテスト用途", "過剰検出の疑い"],
+        allowlistExpiresOn: active.expiresOn,
+      };
+    }
+    return matching.length > 0 ? { ...finding, suppressed: false, suppressionExpired: true } : finding;
   });
 }
 
@@ -736,17 +757,25 @@ function scanDeploymentTextDetailed(filePath: string, content: string, language:
     }
 
     const findings: SecurityFinding[] = [];
+    let envIndent = -1;
     content.split(/\r?\n/).forEach((line, index) => {
+      const indentation = line.match(/^\s*/)?.[0].length ?? 0;
+      if (/^\s*(?:-\s*)?env\s*:\s*(?:#.*)?$/.test(line)) {
+        envIndent = indentation;
+        return;
+      }
+      if (envIndent >= 0 && line.trim() !== "" && indentation <= envIndent) envIndent = -1;
       const hasSecretReference = /\$\{\{\s*secrets\.[A-Za-z0-9_]+\s*\}\}|\bsecrets\.[A-Za-z0-9_]+\b/i.test(line);
       const unsafeDeploymentSink = /--(?:substitutions|update-env-vars|set-env-vars)\b|^\s*env\s*:/i.test(line);
       const safeSecretReference = /--(?:update-secrets|set-secrets)\b|secretmanager|secret-manager/i.test(line);
-      if (hasSecretReference && unsafeDeploymentSink && !safeSecretReference) {
+      const envBinding = envIndent >= 0 ? /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}\s*$/.exec(line) : null;
+      if (hasSecretReference && (envBinding || (unsafeDeploymentSink && !safeSecretReference))) {
         const secretNames = [...line.matchAll(/\bsecrets\.([A-Za-z0-9_]+)\b/gi)].map((match) => match[1]).filter(Boolean);
         if (secretNames.length === 0) {
           findings.push(deploymentFinding(filePath, index + 1, "Secret -> deployment configuration"));
         } else {
           for (const secretName of [...new Set(secretNames)]) {
-            findings.push(deploymentFinding(filePath, index + 1, "Secret -> deployment configuration", secretName));
+            findings.push(deploymentFinding(filePath, index + 1, "Secret -> deployment configuration", secretName, envBinding?.[1]));
           }
         }
       }
@@ -770,7 +799,7 @@ function scanDeploymentTextDetailed(filePath: string, content: string, language:
   return { findings: dedupeFindings(findings), analysisIssues: [] };
 }
 
-function deploymentFinding(filePath: string, lineNumber: number, flow: string, secretName?: string): SecurityFinding {
+function deploymentFinding(filePath: string, lineNumber: number, flow: string, secretName?: string, envKey?: string): SecurityFinding {
   const isCiTestDatabaseReference = filePath.startsWith(".github/workflows/")
     && secretName === "TEST_DATABASE_URL"
     && /(?:test|pytest|alembic|_PROD_TEST_DATABASE_URL)/i.test(flow + " " + secretName);
@@ -789,6 +818,7 @@ function deploymentFinding(filePath: string, lineNumber: number, flow: string, s
       ? "テストDB専用Secretであること、所有者・期限・接続先を確認してください。本番Secretには適用しないでください。"
       : "Secret Manager参照など、Secret実値をコマンド引数へ渡さない方式を検討してください。",
     ...(secretName ? { secretName } : {}),
+    ...(envKey ? { envKey } : {}),
     ...(isCiTestDatabaseReference ? { labels: ["CIテスト用途", "過剰検出の疑い"] } : {}),
   });
   return secretName ? { ...finding, id: `${finding.id}:${secretName}` } : finding;

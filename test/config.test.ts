@@ -125,6 +125,13 @@ describe("validateConfig", () => {
 
     expect(config.securityCheck.baselinePath).toBe(".devguard-security-baseline.json");
   });
+
+  it("loads and validates workflow secret allowlist metadata", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "devguard-workflow-allowlist-"));
+    await writeFile(path.join(root, ".devguard.yml"), `securityCheck:\n  workflowSecretAllowlist:\n    - path: .github/workflows/cd-backend.yml\n      env_key: DATABASE_URL\n      secret_name: TEST_DATABASE_URL\n      reason: テストDB接続\n      owner: backend-team\n      expires_on: 2099-12-31\n`);
+    const { config } = await loadConfig(root);
+    expect(config.securityCheck.workflowSecretAllowlist[0]).toMatchObject({ envKey: "DATABASE_URL", secretName: "TEST_DATABASE_URL", expiresOn: "2099-12-31" });
+  });
 });
 
 describe("preset and keyword helpers", () => {

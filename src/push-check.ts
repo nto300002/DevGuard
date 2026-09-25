@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { loadConfig, type DevGuardConfig } from "./config.js";
 import { getDefaultBranchDiff, type ChangedFile, type DiffLine } from "./git-diff.js";
 import { detectLogFindings, type LogFinding } from "./staged-check.js";
-import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanDiffLinesFromRepository, type SecurityAnalysisIssue, type SecurityFinding } from "./security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, applyWorkflowSecretAllowlist, loadSecurityBaseline, scanDiffLinesFromRepository, type SecurityAnalysisIssue, type SecurityFinding } from "./security-check.js";
 
 export type EnvFinding = {
   name: string;
@@ -64,7 +64,7 @@ export async function runPushCheck(gitRoot: string, options: PushCheckOptions = 
   const logFindings = detectLogFindings(diff.lines).filter((finding) => !finding.suppressed && (finding.kind === "variable-log" || finding.kind === "sensitive-log" || finding.kind === "logger-debug" || finding.kind === "print-variable"));
   const securityScan = config.securityCheck.enabled ? await scanDiffLinesFromRepository(gitRoot, diff.lines, { excludePaths: config.securityCheck.excludePaths }) : { findings: [], analysisIssues: [] };
   const baseline = await loadSecurityBaseline(gitRoot, config.securityCheck.baselinePath);
-  const securityFindings = applySecurityBaseline(applySecurityAllowlist(securityScan.findings, config.securityCheck.allowlist), baseline);
+  const securityFindings = applySecurityBaseline(applyWorkflowSecretAllowlist(applySecurityAllowlist(securityScan.findings, config.securityCheck.allowlist), config.securityCheck.workflowSecretAllowlist), baseline);
   const blockedReasons = getBlockedReasons({ envFindings, scopeFindings, logFindings, securityFindings, securityIssues: securityScan.analysisIssues, config });
   const todos = generatePushTodos({ envFindings, scopeFindings, logFindings });
   const pushAllowed = blockedReasons.length === 0;

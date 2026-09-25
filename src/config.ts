@@ -43,6 +43,7 @@ export type DevGuardConfig = {
     baselinePath: string | null;
     excludePaths: string[];
     allowlist: SecurityAllowlistEntry[];
+    workflowSecretAllowlist: WorkflowSecretAllowlistEntry[];
   };
   testCommands: Record<string, { command: string }>;
 };
@@ -54,6 +55,15 @@ export type SecurityAllowlistEntry = {
   owner: string;
   expires: string;
   issue: string;
+};
+
+export type WorkflowSecretAllowlistEntry = {
+  path: string;
+  envKey: string;
+  secretName: string;
+  reason: string;
+  owner: string;
+  expiresOn: string;
 };
 
 export type LoadedConfig = {
@@ -157,6 +167,7 @@ export const DEFAULT_CONFIG: DevGuardConfig = {
     baselinePath: null,
     excludePaths: [],
     allowlist: [],
+    workflowSecretAllowlist: [],
   },
   testCommands: {
     typecheck: { command: "npm run typecheck" },
@@ -429,6 +440,7 @@ function mergeConfig(base: DevGuardConfig, raw: RawConfig): DevGuardConfig {
       ...(raw.securityCheck.baselinePath === null || typeof raw.securityCheck.baselinePath === "string" ? { baselinePath: raw.securityCheck.baselinePath as string | null } : {}),
       excludePaths: parseStringArray(raw.securityCheck.excludePaths, "securityCheck.excludePaths"),
       allowlist: parseSecurityAllowlist(raw.securityCheck.allowlist),
+      workflowSecretAllowlist: parseWorkflowSecretAllowlist(raw.securityCheck.workflowSecretAllowlist),
     };
   }
 
@@ -437,6 +449,29 @@ function mergeConfig(base: DevGuardConfig, raw: RawConfig): DevGuardConfig {
   }
 
   return base;
+}
+
+function parseWorkflowSecretAllowlist(raw: unknown): WorkflowSecretAllowlistEntry[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new ConfigError("securityCheck.workflowSecretAllowlist は配列である必要があります");
+  return raw.map((entry, index) => {
+    if (!isPlainObject(entry)) throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}] はmapping objectである必要があります`);
+    const values = {
+      path: entry.path,
+      envKey: entry.env_key,
+      secretName: entry.secret_name,
+      reason: entry.reason,
+      owner: entry.owner,
+      expiresOn: entry.expires_on,
+    } as Record<"path" | "envKey" | "secretName" | "reason" | "owner" | "expiresOn", unknown>;
+    for (const [field, value] of Object.entries(values)) {
+      if (typeof value !== "string" || value.trim() === "") throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}].${field} は必須の文字列です`);
+    }
+    const typedValues = values as Record<"path" | "envKey" | "secretName" | "reason" | "owner" | "expiresOn", string>;
+    if (!typedValues.path.startsWith(".github/workflows/")) throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}].path は.github/workflows配下である必要があります`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(typedValues.expiresOn)) throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}].expires_on はYYYY-MM-DD形式である必要があります`);
+    return typedValues as WorkflowSecretAllowlistEntry;
+  });
 }
 
 function validatePresets(enabled: readonly string[]): void {

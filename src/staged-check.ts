@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { loadConfig, mergeDefaultKeywordDatabase, type DevGuardConfig, type KeywordRule } from "./config.js";
 import { getAllDiff, getStagedDiff, getWorktreeDiff, type ChangedFile, type DiffLine, type GitDiffResult } from "./git-diff.js";
-import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanDiffLinesFromRepository, type SecurityAnalysisIssue, type SecurityFinding } from "./security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, applyWorkflowSecretAllowlist, loadSecurityBaseline, scanDiffLinesFromRepository, type SecurityAnalysisIssue, type SecurityFinding } from "./security-check.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -118,7 +118,7 @@ export async function runStagedCheck(gitRoot: string, diffScope: RunCheckStagedC
   const logFindings = applySuppressions(detectLogFindings(stagedDiff.lines), suppressions);
   const securityScan = config.securityCheck.enabled ? await scanDiffLinesFromRepository(gitRoot, stagedDiff.lines, { excludePaths: config.securityCheck.excludePaths }) : { findings: [], analysisIssues: [] };
   const baseline = await loadSecurityBaseline(gitRoot, config.securityCheck.baselinePath);
-  const securityFindings = applySecurityBaseline(applySecurityAllowlist(securityScan.findings, config.securityCheck.allowlist), baseline);
+  const securityFindings = applySecurityBaseline(applyWorkflowSecretAllowlist(applySecurityAllowlist(securityScan.findings, config.securityCheck.allowlist), config.securityCheck.workflowSecretAllowlist), baseline);
   const risk = detectRisk([...keywordFindings, ...logFindings, ...securityFindings]);
   const finalRisk = config.securityCheck.failOnUnparseable && securityScan.analysisIssues.length > 0 ? { ...risk, exitCode: 1 as const } : risk;
 

@@ -338,6 +338,7 @@ Issueは、検出・CI連携・依存関係・人間承認を独立して実装�
 - [要件定義](docs/requirements.md)
 - [詳細定義](docs/detail-design.md)
 - [Secret検出の誤検出を減らす運用マニュアル](docs/manual/false-positive-reduction.md)
+- [GitHub Actions Secret allowlist実装計画](docs/implementation/workflow-secret-allowlist-plan.md)
 
 ## MVP完成条件
 

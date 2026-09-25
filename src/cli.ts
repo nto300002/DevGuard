@@ -9,7 +9,7 @@ import { formatHookInstallResult, installHooks } from "./hooks.js";
 import { detectRoot, formatDoctorResult } from "./root.js";
 import { runPushCheckCommand } from "./push-check.js";
 import { loadConfig } from "./config.js";
-import { applySecurityAllowlist, applySecurityBaseline, filterSecurityFindingsByMode, loadSecurityBaseline, scanRepositoryDetailed, type SecurityAnalysisIssue, type SecurityFinding, type SecurityScanMode } from "./security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, applyWorkflowSecretAllowlist, filterSecurityFindingsByMode, loadSecurityBaseline, scanRepositoryDetailed, type SecurityAnalysisIssue, type SecurityFinding, type SecurityScanMode } from "./security-check.js";
 
 const helpText = `SafeCheck
 
@@ -85,7 +85,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
       return 0;
     }
     const baseline = await loadSecurityBaseline(root.gitRoot, config.securityCheck.baselinePath);
-    const findings = filterSecurityFindingsByMode(applySecurityBaseline(applySecurityAllowlist(scan.findings, config.securityCheck.allowlist), baseline), mode);
+    const findings = filterSecurityFindingsByMode(applySecurityBaseline(applyWorkflowSecretAllowlist(applySecurityAllowlist(scan.findings, config.securityCheck.allowlist), config.securityCheck.workflowSecretAllowlist), baseline), mode);
     process.stdout.write(args.includes("--sarif") ? formatSecurityCheckSarif(findings, scan.analysisIssues) : args.includes("--json") ? formatSecurityCheckJson(findings, scan.analysisIssues) : formatSecurityCheckResult(findings, scan.analysisIssues));
     const hasHighRisk = findings.some((finding) => finding.severity === "high" && !finding.suppressed);
     return hasHighRisk || (config.securityCheck.failOnUnparseable && scan.analysisIssues.length > 0) ? 1 : 0;
@@ -127,6 +127,7 @@ export function formatSecurityCheckResult(findings: SecurityFinding[], analysisI
     lines.push(`  Flow: ${finding.flow}`);
     lines.push(`  カテゴリ: ${finding.category}`);
     if (finding.labels?.length) lines.push(`  ラベル: ${finding.labels.join(", ")}`);
+    if (finding.allowlistExpiresOn) lines.push(`  許容期限: ${finding.allowlistExpiresOn}`);
     if (finding.cwe || finding.owaspCategory) lines.push(`  CWE/OWASP: ${finding.cwe ?? "-"} / ${finding.owaspCategory ?? "-"}`);
     lines.push(`  内容: ${finding.message}`);
     lines.push(`  対応: ${finding.remediation}`);
@@ -191,6 +192,7 @@ export function formatSecurityCheckSarif(findings: SecurityFinding[], analysisIs
       ...(finding.owaspCategory ? { owaspCategory: finding.owaspCategory } : {}),
       ...(finding.secretName ? { secretName: finding.secretName } : {}),
       ...(finding.labels?.length ? { labels: finding.labels } : {}),
+      ...(finding.allowlistExpiresOn ? { allowlistExpiresOn: finding.allowlistExpiresOn } : {}),
       ...(finding.suppressed ? { suppressed: true } : {}),
     },
   }));

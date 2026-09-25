@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { applySecurityAllowlist, applySecurityBaseline, loadSecurityBaseline, scanDiffLines, scanGitHistorySecrets, scanRepository, scanRepositoryDetailed, scanSecretPatterns, scanText, scanTextDetailed } from "../src/security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, applyWorkflowSecretAllowlist, loadSecurityBaseline, scanDiffLines, scanGitHistorySecrets, scanRepository, scanRepositoryDetailed, scanSecretPatterns, scanText, scanTextDetailed } from "../src/security-check.js";
 
 describe("security flow scan", () => {
   it("detects common secret formats without exposing their values", () => {
@@ -240,6 +240,38 @@ describe("security flow scan", () => {
         confidence: "high",
       }),
     ]));
+  });
+
+  it("extracts workflow env keys from YAML structure", () => {
+    const findings = scanText(
+      ".github/workflows/cd-backend.yml",
+      "jobs:\n  test:\n    steps:\n      - name: pytest\n        env:\n          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}\n          SECRET_KEY: ${{ secrets.PROD_SECRET_KEY }}\n        run: pytest\n",
+      "yaml",
+    );
+
+    expect(findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ envKey: "DATABASE_URL", secretName: "TEST_DATABASE_URL" }),
+      expect.objectContaining({ envKey: "SECRET_KEY", secretName: "PROD_SECRET_KEY" }),
+    ]));
+  });
+
+  it("allows only an exact, non-expired workflow secret entry", () => {
+    const findings = scanText(".github/workflows/cd-backend.yml", "jobs:\n  test:\n    steps:\n      - env:\n          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}\n", "yaml");
+    const [allowed] = applyWorkflowSecretAllowlist(findings, [{
+      path: ".github/workflows/cd-backend.yml", envKey: "DATABASE_URL", secretName: "TEST_DATABASE_URL",
+      reason: "test database", owner: "backend-team", expiresOn: "2099-12-31",
+    }]);
+    expect(allowed).toMatchObject({ suppressed: true, labels: ["CIテスト用途", "過剰検出の疑い"], allowlistExpiresOn: "2099-12-31" });
+  });
+
+  it("does not allow expired or mismatched workflow entries", () => {
+    const findings = scanText(".github/workflows/cd-backend.yml", "jobs:\n  test:\n    steps:\n      - env:\n          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}\n", "yaml");
+    const [result] = applyWorkflowSecretAllowlist(findings, [{
+      path: ".github/workflows/cd-backend.yml", envKey: "DATABASE_URL", secretName: "TEST_DATABASE_URL",
+      reason: "expired test database", owner: "backend-team", expiresOn: "2020-01-01",
+    }]);
+    expect(result).not.toHaveProperty("suppressed", true);
+    expect(result).not.toHaveProperty("labels");
   });
 
   it("does not flag a Cloud Run Secret Manager reference as a plain secret flow", () => {
