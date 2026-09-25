@@ -295,6 +295,29 @@ npx --yes --package=agent-safecheck safecheck push-check --agent-block
 
 pre-commitでHigh riskのcommit findingが初めて出た場合は、commitを1回停止して強い警告と確認導線を表示します。同じstaged差分で再実行した2回目以降は確認済みとしてcommitを許可します。差分を変更した場合は新しい確認サイクルになります。pre-pushの`--agent-block`はpush自体を停止せず、High riskのpush findingに対して強い警告と確認導線を表示します。Security FlowのHigh検出も同様に強い警告の対象です。
 
+## ターミナルログのMarkdown保存
+
+各コマンドのターミナル出力は、`--save-log`でMarkdownファイルへ保存できます。画面出力と終了コードは変わりません。
+
+保存先を省略すると、実行ディレクトリ配下の`.safecheck/logs/`へ保存します。
+
+```bash
+npx --yes --package=agent-safecheck safecheck security-check --mode general --save-log
+# .safecheck/logs/security-check-<timestamp>.md
+```
+
+保存先を指定する場合:
+
+```bash
+npx --yes --package=agent-safecheck safecheck check --staged \
+  --save-log .safecheck/logs/pre-commit.md
+
+npx --yes --package=agent-safecheck safecheck push-check --agent-block \
+  --save-log .safecheck/logs/pre-push.md
+```
+
+Markdownには実行日時、実行ディレクトリ、終了コード、実行コマンド、ターミナル出力を記録します。ANSIカラーコードは除去されます。Secretの実値をログへ追加しない既存方針も維持します。ログをcommitしない場合は、`.gitignore`へ`.safecheck/logs/`を追加してください。
+
 ## Human-on-the-Loop開発フロー
 
 SafeCheckはAIエージェントや自動化された開発フローを置き換えるのではなく、人間が判断すべき高リスク変更だけを止める安全弁として利用します。通常の実装・テスト・低リスク変更は自動で進め、新規High検出、認証・認可、Secrets、公開API、DB、デプロイ設定の変更で人間の確認を要求します。

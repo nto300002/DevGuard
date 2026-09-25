@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { symlink, mkdtemp } from "node:fs/promises";
+import { readFile, symlink, mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,7 @@ import { formatSecurityCheckJson, formatSecurityCheckResult, formatSecurityCheck
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cliPath = path.join(repoRoot, "src", "cli.ts");
+const tsxBin = path.join(repoRoot, "node_modules", ".bin", "tsx");
 
 describe("devguard CLI", () => {
   it("prints help", async () => {
@@ -26,6 +27,22 @@ describe("devguard CLI", () => {
     expect(stdout).toContain("check --all-diff");
     expect(stdout).toContain("push-check");
     expect(stdout).toContain("install-hooks [--include-submodules]");
+    expect(stdout).toContain("<command> --save-log [path]");
+  });
+
+  it("saves the terminal output as Markdown without changing the command result", async () => {
+    const repo = await mkdtemp(path.join(os.tmpdir(), "devguard-cli-log-"));
+    await execFileAsync("git", ["init", "-b", "main"], { cwd: repo });
+    const logPath = path.join(repo, ".safecheck", "logs", "doctor.md");
+
+    const { stdout } = await execFileAsync(tsxBin, [cliPath, "doctor", "--save-log", logPath], { cwd: repo });
+    const markdown = await readFile(logPath, "utf8");
+
+    expect(stdout).toContain("SafeCheck doctor");
+    expect(markdown).toContain("# SafeCheck 実行ログ");
+    expect(markdown).toContain("safecheck doctor");
+    expect(markdown).toContain("SafeCheck doctor");
+    expect(markdown).toContain("終了コード: `0`");
   });
 
   it("detects direct execution through a symlinked bin path", async () => {

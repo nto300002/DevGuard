@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { realpathSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCheckStagedCommand } from "./staged-check.js";
@@ -27,6 +27,7 @@ const helpText = `SafeCheck
   safecheck security-check --write-baseline
   safecheck push-check
   safecheck install-hooks [--include-submodules]
+  safecheck <command> --save-log [path]
   safecheck --help
 
 AI開発向けのpre-commit / pre-pushセルフレビューCLIです。
@@ -37,6 +38,94 @@ export function getHelpText(): string {
 }
 
 export async function main(args = process.argv.slice(2)): Promise<number> {
+  const parsed = parseSaveLogOption(args);
+  if (parsed.logPath) {
+    return runWithMarkdownLog(parsed.args, parsed.logPath, () => mainWithoutLog(parsed.args));
+  }
+  return mainWithoutLog(parsed.args);
+}
+
+function parseSaveLogOption(args: string[]): { args: string[]; logPath?: string } {
+  const index = args.indexOf("--save-log");
+  if (index < 0) return { args };
+  const next = args[index + 1];
+  const requestedPath = next && !next.startsWith("--") ? next : undefined;
+  const command = args[0] ?? "safecheck";
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "").replace(/Z$/, "Z");
+  const defaultPath = `.safecheck/logs/${command}-${timestamp}.md`;
+  const logPath = path.resolve(process.cwd(), requestedPath ?? defaultPath);
+  const cleanedArgs = args.filter((_, currentIndex) => currentIndex !== index && (!requestedPath || currentIndex !== index + 1));
+  return { args: cleanedArgs, logPath };
+}
+
+async function runWithMarkdownLog(args: string[], logPath: string, command: () => Promise<number>): Promise<number> {
+  const startedAt = new Date();
+  let stdout = "";
+  let stderr = "";
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  process.stdout.write = ((chunk: string | Uint8Array, ...rest: unknown[]) => {
+    stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    return originalStdoutWrite(chunk, ...(rest as [BufferEncoding, ((error?: Error | null) => void) | undefined]));
+  }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array, ...rest: unknown[]) => {
+    stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    return originalStderrWrite(chunk, ...(rest as [BufferEncoding, ((error?: Error | null) => void) | undefined]));
+  }) as typeof process.stderr.write;
+
+  let exitCode = 0;
+  try {
+    exitCode = await command();
+    return exitCode;
+  } catch (error) {
+    exitCode = 2;
+    stderr += `${error instanceof Error ? error.stack ?? error.message : String(error)}\n`;
+    throw error;
+  } finally {
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+    await saveMarkdownLog(logPath, {
+      command: `safecheck ${args.join(" ")}`,
+      startedAt,
+      cwd: process.cwd(),
+      exitCode,
+      stdout,
+      stderr,
+    });
+  }
+}
+
+async function saveMarkdownLog(logPath: string, input: { command: string; startedAt: Date; cwd: string; exitCode: number; stdout: string; stderr: string }): Promise<void> {
+  await mkdir(path.dirname(logPath), { recursive: true });
+  const output = stripAnsi(`${input.stdout}${input.stderr}`);
+  const markdown = [
+    "# SafeCheck 実行ログ",
+    "",
+    `- 実行日時: ${input.startedAt.toISOString()}`,
+    `- 実行ディレクトリ: \`${input.cwd}\``,
+    `- 終了コード: \`${input.exitCode}\``,
+    "",
+    "## コマンド",
+    "",
+    "```sh",
+    input.command,
+    "```",
+    "",
+    "## ターミナル出力",
+    "",
+    "~~~text",
+    output.trimEnd(),
+    "~~~",
+    "",
+  ].join("\n");
+  await writeFile(logPath, markdown, "utf8");
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[０-９A-Za-z]?))/g, "");
+}
+
+async function mainWithoutLog(args: string[]): Promise<number> {
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     process.stdout.write(getHelpText());
     return 0;
