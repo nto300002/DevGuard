@@ -769,6 +769,16 @@ function scanDeploymentTextDetailed(filePath: string, content: string, language:
       const unsafeDeploymentSink = /--(?:substitutions|update-env-vars|set-env-vars)\b|^\s*env\s*:/i.test(line);
       const safeSecretReference = /--(?:update-secrets|set-secrets)\b|secretmanager|secret-manager/i.test(line);
       const envBinding = envIndent >= 0 ? /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}\s*$/.exec(line) : null;
+      const externalBinding = envIndent >= 0 ? /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\$\{\{\s*(?:github\.event|inputs)\.[^}]+\}\}\s*$/.exec(line) : null;
+      if (externalBinding) findings.push({
+        ...createFinding({
+          filePath, lineNumber: index + 1, language, ruleId: "workflow-external-input", severity: "high", confidence: "high",
+          source: "user-input", sink: "deployment", flow: "External workflow input -> deployment configuration",
+          message: "外部入力由来のworkflow値が環境変数へ流入しています。",
+          remediation: "github.eventやinputsの値をSecret用途の環境変数へ直接渡さず、固定値または検証済みの許可リストを使用してください。",
+        }),
+        envKey: externalBinding[1],
+      });
       if (hasSecretReference && (envBinding || (unsafeDeploymentSink && !safeSecretReference))) {
         const secretNames = [...line.matchAll(/\bsecrets\.([A-Za-z0-9_]+)\b/gi)].map((match) => match[1]).filter(Boolean);
         if (secretNames.length === 0) {
@@ -780,7 +790,7 @@ function scanDeploymentTextDetailed(filePath: string, content: string, language:
         }
       }
     });
-    return { findings: dedupeFindings(findings), analysisIssues: [] };
+    return { findings: dedupeFindings([...findings, ...scanSecretPatterns(filePath, content, language)]), analysisIssues: [] };
   }
 
   const secretArgs = new Set<string>();

@@ -274,6 +274,16 @@ describe("security flow scan", () => {
     expect(result).not.toHaveProperty("labels");
   });
 
+  it("blocks external GitHub expressions in workflow env values", () => {
+    const findings = scanText(".github/workflows/cd-backend.yml", "jobs:\n  test:\n    steps:\n      - env:\n          DATABASE_URL: ${{ github.event.inputs.database_url }}\n", "yaml");
+    expect(findings).toEqual(expect.arrayContaining([expect.objectContaining({ ruleId: "workflow-external-input", severity: "high" })]));
+  });
+
+  it("scans fixed JWT and connection strings in workflow YAML", () => {
+    const findings = scanText(".github/workflows/cd-backend.yml", "env:\n  JWT: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.signature\n  DATABASE_URL: postgres://user:password@example.test:5432/app\n", "yaml");
+    expect(findings.map((finding) => finding.ruleId)).toEqual(expect.arrayContaining(["secret-jwt", "secret-connection-string"]));
+  });
+
   it("does not flag a Cloud Run Secret Manager reference as a plain secret flow", () => {
     const findings = scanText(
       "cloudbuild.yaml",

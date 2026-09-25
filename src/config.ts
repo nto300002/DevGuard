@@ -470,6 +470,10 @@ function parseWorkflowSecretAllowlist(raw: unknown): WorkflowSecretAllowlistEntr
     const typedValues = values as Record<"path" | "envKey" | "secretName" | "reason" | "owner" | "expiresOn", string>;
     if (!typedValues.path.startsWith(".github/workflows/")) throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}].path は.github/workflows配下である必要があります`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(typedValues.expiresOn)) throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}].expires_on はYYYY-MM-DD形式である必要があります`);
+    const allowedSecret = (typedValues.envKey === "DATABASE_URL" || typedValues.envKey === "TEST_DATABASE_URL") && typedValues.secretName === "TEST_DATABASE_URL"
+      || typedValues.envKey === "SECRET_KEY" && typedValues.secretName === "E2E_SECRET_KEY"
+      || typedValues.envKey === "CALENDAR_ENCRYPTION_KEY" && typedValues.secretName === "CALENDAR_ENCRYPTION_KEY";
+    if (!allowedSecret) throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}] は許可された環境変数とSecretの組み合わせではありません`);
     return typedValues as WorkflowSecretAllowlistEntry;
   });
 }
