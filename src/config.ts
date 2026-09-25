@@ -59,6 +59,8 @@ export type SecurityAllowlistEntry = {
 
 export type WorkflowSecretAllowlistEntry = {
   path: string;
+  jobId: string;
+  stepName: string;
   envKey: string;
   secretName: string;
   reason: string;
@@ -458,16 +460,18 @@ function parseWorkflowSecretAllowlist(raw: unknown): WorkflowSecretAllowlistEntr
     if (!isPlainObject(entry)) throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}] はmapping objectである必要があります`);
     const values = {
       path: entry.path,
+      jobId: entry.job_id,
+      stepName: entry.step_name,
       envKey: entry.env_key,
       secretName: entry.secret_name,
       reason: entry.reason,
       owner: entry.owner,
       expiresOn: entry.expires_on,
-    } as Record<"path" | "envKey" | "secretName" | "reason" | "owner" | "expiresOn", unknown>;
+    } as Record<"path" | "jobId" | "stepName" | "envKey" | "secretName" | "reason" | "owner" | "expiresOn", unknown>;
     for (const [field, value] of Object.entries(values)) {
       if (typeof value !== "string" || value.trim() === "") throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}].${field} は必須の文字列です`);
     }
-    const typedValues = values as Record<"path" | "envKey" | "secretName" | "reason" | "owner" | "expiresOn", string>;
+    const typedValues = values as Record<"path" | "jobId" | "stepName" | "envKey" | "secretName" | "reason" | "owner" | "expiresOn", string>;
     if (!typedValues.path.startsWith(".github/workflows/")) throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}].path は.github/workflows配下である必要があります`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(typedValues.expiresOn)) throw new ConfigError(`securityCheck.workflowSecretAllowlist[${index}].expires_on はYYYY-MM-DD形式である必要があります`);
     const allowedSecret = (typedValues.envKey === "DATABASE_URL" || typedValues.envKey === "TEST_DATABASE_URL") && typedValues.secretName === "TEST_DATABASE_URL"

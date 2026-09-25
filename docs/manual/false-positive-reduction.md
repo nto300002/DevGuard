@@ -20,11 +20,13 @@ jobs:
 
 ### 1. 限定allowlistを使用する
 
-allowlistはworkflow全体やリポジトリ全体を対象にせず、ファイル・環境変数・Secret名を指定する。次の項目を必須とする。
+allowlistはworkflow全体やリポジトリ全体を対象にせず、ファイル・job・step・環境変数・Secret名を完全一致で指定する。次の項目を必須とする。
 
 | 項目 | 内容 |
 | --- | --- |
 | `path` | 対象workflowの相対パス |
+| `job_id` | 対象jobのID |
+| `step_name` | 対象stepの名前 |
 | `env_key` | workflowの環境変数名 |
 | `secret_name` | GitHub Actions Secret名 |
 | `reason` | 許容する業務上の理由 |
@@ -37,6 +39,8 @@ allowlistはworkflow全体やリポジトリ全体を対象にせず、ファイ
 securityCheck:
   workflowSecretAllowlist:
     - path: .github/workflows/cd-backend.yml
+      job_id: deploy-backend
+      step_name: Run Pytest
       env_key: TEST_DATABASE_URL
       secret_name: TEST_DATABASE_URL
       reason: テストDBのmigrationとpytestに使用
@@ -77,12 +81,14 @@ ${{ secrets.TEST_DATABASE_URL }}
 単純な文字列検索ではなく、YAMLとしてworkflowを解析する。判定対象は次の構造に限定する。
 
 ```text
-jobs.*.steps[*].env.<env_key> = ${{ secrets.<secret_name> }}
+jobs.<job_id>.steps[*].name = <step_name>
+jobs.<job_id>.steps[*].env.<env_key> = ${{ secrets.<secret_name> }}
 ```
 
 この構造解析により、次を区別する。
 
 - `env`キーと値の正しい組み合わせ
+- job IDとstep名の正しい組み合わせ
 - `run`コマンド中のSecret参照
 - コメントやREADME内の説明文
 - 同一行に複数存在するSecret参照
@@ -102,7 +108,7 @@ jobs.*.steps[*].env.<env_key> = ${{ secrets.<secret_name> }}
 
 SafeCheck側に、少なくとも次のテストを追加する。
 
-1. 正当な `TEST_DATABASE_URL` のGitHub Expressionが許容され、ラベル付きで出力される
+1. 正当な `TEST_DATABASE_URL` のGitHub Expressionが、path・job ID・step名・envキー・Secret名の完全一致で許容され、ラベル付きで出力される
 2. 同一行にある `TEST_DATABASE_URL` と `PROD_SECRET_KEY` が個別に検出される
 3. 固定JWTが検出される
 4. 固定Fernet鍵・秘密鍵形式が検出される

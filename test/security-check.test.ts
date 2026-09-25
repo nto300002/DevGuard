@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { applySecurityAllowlist, applySecurityBaseline, applyWorkflowSecretAllowlist, loadSecurityBaseline, scanDiffLines, scanGitHistorySecrets, scanRepository, scanRepositoryDetailed, scanSecretPatterns, scanText, scanTextDetailed } from "../src/security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, applyWorkflowSecretAllowlist, extractWorkflowSecretBindings, loadSecurityBaseline, scanDiffLines, scanGitHistorySecrets, scanRepository, scanRepositoryDetailed, scanSecretPatterns, scanText, scanTextDetailed } from "../src/security-check.js";
 
 describe("security flow scan", () => {
   it("detects common secret formats without exposing their values", () => {
@@ -258,7 +258,7 @@ describe("security flow scan", () => {
   it("allows only an exact, non-expired workflow secret entry", () => {
     const findings = scanText(".github/workflows/cd-backend.yml", "jobs:\n  test:\n    steps:\n      - env:\n          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}\n", "yaml");
     const [allowed] = applyWorkflowSecretAllowlist(findings, [{
-      path: ".github/workflows/cd-backend.yml", envKey: "DATABASE_URL", secretName: "TEST_DATABASE_URL",
+      path: ".github/workflows/cd-backend.yml", jobId: "test", stepName: "step-1", envKey: "DATABASE_URL", secretName: "TEST_DATABASE_URL",
       reason: "test database", owner: "backend-team", expiresOn: "2099-12-31",
     }]);
     expect(allowed).toMatchObject({ suppressed: true, labels: ["CIテスト用途", "過剰検出の疑い"], allowlistExpiresOn: "2099-12-31" });
@@ -267,7 +267,7 @@ describe("security flow scan", () => {
   it("does not allow expired or mismatched workflow entries", () => {
     const findings = scanText(".github/workflows/cd-backend.yml", "jobs:\n  test:\n    steps:\n      - env:\n          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}\n", "yaml");
     const [result] = applyWorkflowSecretAllowlist(findings, [{
-      path: ".github/workflows/cd-backend.yml", envKey: "DATABASE_URL", secretName: "TEST_DATABASE_URL",
+      path: ".github/workflows/cd-backend.yml", jobId: "test", stepName: "step-1", envKey: "DATABASE_URL", secretName: "TEST_DATABASE_URL",
       reason: "expired test database", owner: "backend-team", expiresOn: "2020-01-01",
     }]);
     expect(result).not.toHaveProperty("suppressed", true);
@@ -277,6 +277,18 @@ describe("security flow scan", () => {
   it("blocks external GitHub expressions in workflow env values", () => {
     const findings = scanText(".github/workflows/cd-backend.yml", "jobs:\n  test:\n    steps:\n      - env:\n          DATABASE_URL: ${{ github.event.inputs.database_url }}\n", "yaml");
     expect(findings).toEqual(expect.arrayContaining([expect.objectContaining({ ruleId: "workflow-external-input", severity: "high" })]));
+  });
+
+  it("resolves YAML env aliases before applying job and step scoped allowlists", () => {
+    const content = "common: &common\n  SECRET_KEY: ${{ secrets.E2E_SECRET_KEY }}\njobs:\n  e2e:\n    steps:\n      - name: Run E2E\n        env: *common\n        run: pytest e2e\n";
+    const bindings = extractWorkflowSecretBindings(".github/workflows/cd-backend.yml", content);
+    expect(bindings).toEqual([expect.objectContaining({ jobId: "e2e", stepName: "Run E2E", envKey: "SECRET_KEY", secretName: "E2E_SECRET_KEY" })]);
+    const [finding] = scanText(".github/workflows/cd-backend.yml", content, "yaml");
+    const [allowed] = applyWorkflowSecretAllowlist([finding], [{
+      path: ".github/workflows/cd-backend.yml", jobId: "e2e", stepName: "Run E2E", envKey: "SECRET_KEY", secretName: "E2E_SECRET_KEY",
+      reason: "E2E signing key", owner: "backend-team", expiresOn: "2099-12-31",
+    }]);
+    expect(allowed).toMatchObject({ suppressed: true, jobId: "e2e", stepName: "Run E2E" });
   });
 
   it("scans fixed JWT and connection strings in workflow YAML", () => {

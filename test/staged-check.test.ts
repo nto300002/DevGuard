@@ -102,6 +102,20 @@ describe("staged check units", () => {
     );
   });
 
+  it("allows an exact workflow secret through the real check --staged path", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, ".devguard.yml"), `securityCheck:\n  workflowSecretAllowlist:\n    - path: .github/workflows/ci.yml\n      job_id: e2e\n      step_name: Run E2E\n      env_key: SECRET_KEY\n      secret_name: E2E_SECRET_KEY\n      reason: CI/E2E signing key\n      owner: backend-team\n      expires_on: 2099-12-31\n`);
+    await mkdir(path.join(repo, ".github", "workflows"), { recursive: true });
+    await writeFile(path.join(repo, ".github", "workflows", "ci.yml"), "jobs:\n  e2e:\n    steps:\n      - name: Run E2E\n        env:\n          SECRET_KEY: ${{ secrets.E2E_SECRET_KEY }}\n        run: pytest e2e\n");
+    await git(repo, ["add", ".devguard.yml", ".github/workflows/ci.yml"]);
+
+    const result = await runStagedCheck(repo);
+
+    expect(result.securityFindings).toEqual([expect.objectContaining({ suppressed: true, jobId: "e2e", stepName: "Run E2E", envKey: "SECRET_KEY", secretName: "E2E_SECRET_KEY" })]);
+    expect(result.keywordFindings.filter((finding) => !finding.suppressed)).toEqual([]);
+    expect(result.risk.level).not.toBe("high");
+  });
+
   it("does not duplicate GitHub Actions secret names as generic keyword findings", () => {
     const findings = detectKeywordFindings([
       added(".github/workflows/cd-backend.yml", 1, "TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}"),

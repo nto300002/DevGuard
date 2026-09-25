@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
-import { loadConfig, mergeDefaultKeywordDatabase, type DevGuardConfig, type KeywordRule } from "./config.js";
+import { loadConfig, mergeDefaultKeywordDatabase, type DevGuardConfig, type KeywordRule, type WorkflowSecretAllowlistEntry } from "./config.js";
 import { getAllDiff, getStagedDiff, getWorktreeDiff, type ChangedFile, type DiffLine, type GitDiffResult } from "./git-diff.js";
-import { applySecurityAllowlist, applySecurityBaseline, applyWorkflowSecretAllowlist, loadSecurityBaseline, scanDiffLinesFromRepository, type SecurityAnalysisIssue, type SecurityFinding } from "./security-check.js";
+import { applySecurityAllowlist, applySecurityBaseline, applyWorkflowSecretAllowlist, extractWorkflowSecretBindings, loadSecurityBaseline, scanDiffLinesFromRepository, type SecurityAnalysisIssue, type SecurityFinding } from "./security-check.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -114,7 +115,7 @@ export async function runStagedCheck(gitRoot: string, diffScope: RunCheckStagedC
   const [{ config }, stagedDiff] = await Promise.all([loadConfig(gitRoot), getDiffByScope(gitRoot, diffScope)]);
   const classifiedFiles = classifyFiles(stagedDiff.files);
   const suppressions = parseSuppressionComments(stagedDiff.lines);
-  const keywordFindings = applySuppressions(detectKeywordFindings(stagedDiff.lines), suppressions);
+  const keywordFindings = applySuppressions(await applyWorkflowKeywordAllowlist(detectKeywordFindings(stagedDiff.lines), gitRoot, config.securityCheck.workflowSecretAllowlist), suppressions);
   const logFindings = applySuppressions(detectLogFindings(stagedDiff.lines), suppressions);
   const securityScan = config.securityCheck.enabled ? await scanDiffLinesFromRepository(gitRoot, stagedDiff.lines, { excludePaths: config.securityCheck.excludePaths }) : { findings: [], analysisIssues: [] };
   const baseline = await loadSecurityBaseline(gitRoot, config.securityCheck.baselinePath);
@@ -136,6 +137,24 @@ export async function runStagedCheck(gitRoot: string, diffScope: RunCheckStagedC
     checklist: generateChecklist(classifiedFiles),
     commitPlan: suggestCommitPlan(classifiedFiles),
   };
+}
+
+async function applyWorkflowKeywordAllowlist(findings: KeywordFinding[], gitRoot: string, entries: readonly WorkflowSecretAllowlistEntry[]): Promise<KeywordFinding[]> {
+  const bindingsByFile = new Map<string, ReturnType<typeof extractWorkflowSecretBindings>>();
+  for (const finding of findings) {
+    if (!finding.filePath.startsWith(".github/workflows/") || finding.ruleId !== "secrets-credentials" || bindingsByFile.has(finding.filePath)) continue;
+    try {
+      bindingsByFile.set(finding.filePath, extractWorkflowSecretBindings(finding.filePath, await readFile(`${gitRoot}/${finding.filePath}`, "utf8")));
+    } catch {
+      bindingsByFile.set(finding.filePath, []);
+    }
+  }
+  return findings.map((finding) => {
+    const binding = bindingsByFile.get(finding.filePath)?.find((candidate) => candidate.lineNumber === finding.lineNumber && candidate.secretName);
+    if (!binding?.secretName) return finding;
+    const active = entries.find((entry) => entry.path === finding.filePath && entry.jobId === binding.jobId && entry.stepName === binding.stepName && entry.envKey === binding.envKey && entry.secretName === binding.secretName && `${entry.expiresOn}T23:59:59.999Z` >= new Date().toISOString());
+    return active ? { ...finding, suppressed: true, suppressionReason: active.reason } : finding;
+  });
 }
 
 export async function runCheckStagedCommand(cwd: string, options: RunCheckStagedCommandOptions = {}): Promise<number> {
@@ -212,7 +231,7 @@ export function detectKeywordFindings(lines: DiffLine[], rules: KeywordRule[] = 
       }
 
       for (const pattern of rule.patterns) {
-        if (!isContextualGithubSecretReference(line, rule, pattern) && matchesPattern(keywordMatchContent(line), pattern, rule)) {
+        if (!isSafecheckMetadataSecretLine(line, rule) && !isContextualGithubSecretReference(line, rule, pattern) && matchesPattern(keywordMatchContent(line), pattern, rule)) {
           findings.push({
             type: "keyword",
             id: `keyword:${rule.id}:${line.filePath}:${line.lineNumber}:${pattern}`,
@@ -236,6 +255,10 @@ export function detectKeywordFindings(lines: DiffLine[], rules: KeywordRule[] = 
 function keywordMatchContent(line: DiffLine): string {
   if (!line.filePath.startsWith(".github/workflows/")) return line.content;
   return line.content.replace(/\$\{\{\s*secrets\.[A-Za-z0-9_]+\s*\}\}/gi, "").replace(/\bsecrets\.[A-Za-z0-9_]+\b/gi, "");
+}
+
+function isSafecheckMetadataSecretLine(line: DiffLine, rule: KeywordRule): boolean {
+  return rule.id === "secrets-credentials" && line.filePath === ".devguard.yml" && /workflowSecretAllowlist|(?:env_key|secret_name|reason|owner|expires_on):/i.test(line.content);
 }
 
 function isContextualGithubSecretReference(line: DiffLine, rule: KeywordRule, pattern: string): boolean {
@@ -332,7 +355,7 @@ export function applySuppressions<T extends KeywordFinding | LogFinding>(finding
     });
 
     if (!suppression) {
-      return { ...finding, suppressed: false };
+      return { ...finding, suppressed: finding.suppressed ?? false };
     }
 
     return {
