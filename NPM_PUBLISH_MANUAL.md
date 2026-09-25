@@ -80,6 +80,34 @@ npx --yes --package=agent-safecheck@<公開バージョン> safecheck check --st
 
 同じバージョンは再公開できない。`npm version patch --no-git-tag-version`などでバージョンを上げ、`package.json`と`package-lock.json`を確認してから再実行する。
 
+例えば、次のエラーが出た場合:
+
+```text
+npm error You cannot publish over the previously published versions: 0.1.15.
+```
+
+`0.1.15`はすでにnpmへ公開済みであるため、`0.1.15`の再公開はできない。次のように`0.1.16`へ更新して公開する。
+
+```sh
+npm view agent-safecheck version
+npm version 0.1.16 --no-git-tag-version
+node -p "require('./package.json').version"
+node -p "require('./package-lock.json').version"
+npm test
+npm run typecheck
+npm run build
+npm publish --access public
+```
+
+更新後に、公開確認を行う。
+
+```sh
+npm view agent-safecheck version
+npx --yes --package=agent-safecheck@0.1.16 safecheck --help
+```
+
+`npm unpublish`、同じバージョンへの強制公開、`package.json`だけの変更は行わない。npm公開では`package.json`と`package-lock.json`の両方を同じバージョンに更新する。
+
 ### `E404 ... PUT ...` または `could not be found or you do not have permission`
 
 次を順番に確認する。
