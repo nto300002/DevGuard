@@ -19,15 +19,15 @@
 
 ## タスクリスト（TDD順）
 
-- [ ] 1. allowlistの型・設定パーサー・期限検証を追加
-- [ ] 2. YAML workflowからstep/env/Secret expressionを構造的に抽出
-- [ ] 3. 許容可能な環境変数・Secretの組み合わせを判定
-- [ ] 4. 固定値・本番Secret・外部入力を拒否するテストを追加
-- [ ] 5. 検出結果へSecret名・環境変数名・ラベル・期限を追加
-- [ ] 6. `security-check`、`check`、`push-check`へ判定を統合
-- [ ] 7. keikakun_app / keikakun_back相当のworkflow fixtureで統合テスト
-- [ ] 8. 全テスト・型検査・ビルド・実スキャンを実施
-- [ ] 9. READMEと誤検出削減マニュアルを更新
+- [x] 1. allowlistの型・設定パーサー・期限検証を追加
+- [x] 2. YAML workflowからstep/env/Secret expressionを構造的に抽出
+- [x] 3. 許容可能な環境変数・Secretの組み合わせを判定
+- [x] 4. 固定値・本番Secret・外部入力を拒否するテストを追加
+- [x] 5. 検出結果へSecret名・環境変数名・ラベル・期限を追加
+- [x] 6. `security-check`、`check`、`push-check`へ判定を統合
+- [x] 7. keikakun_app / keikakun_back相当のworkflow fixtureで統合テスト
+- [x] 8. 全テスト・型検査・ビルド・実スキャンを実施
+- [x] 9. READMEと誤検出削減マニュアルを更新
 - [ ] 10. npmの次版へ反映する準備を行う
 
 各タスクは、先に失敗するテストを追加し、実装後に該当テストと全体テストを実行する。
