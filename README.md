@@ -166,6 +166,8 @@ branch全体をpush前に確認します。
 safecheck push-check --agent-block
 ```
 
+`--agent-block`は実際にpushを拒否する機能ではありません。通常の警告より強い警告、検出理由、確認Todo、AIエージェント向けの確認導線を表示し、確認後に利用者がpushを継続できるHuman-on-the-Loop機能です。
+
 現在のリポジトリにGit hookを導入します。
 
 ```bash
@@ -291,7 +293,7 @@ npx --yes --package=agent-safecheck safecheck check --staged
 npx --yes --package=agent-safecheck safecheck push-check --agent-block
 ```
 
-High riskのcommit findingがある場合はcommitを停止します。High riskのpush findingがある場合はpushを停止します。Security FlowのHigh検出も同様に停止対象です。
+High riskのcommit findingがある場合はcommitを停止します。pre-pushの`--agent-block`はpush自体を停止せず、High riskのpush findingに対して強い警告と確認導線を表示します。Security FlowのHigh検出も同様に強い警告の対象です。
 
 ## Human-on-the-Loop開発フロー
 

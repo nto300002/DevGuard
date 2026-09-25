@@ -88,7 +88,11 @@ export async function runPushCheck(gitRoot: string, options: PushCheckOptions = 
 export async function runPushCheckCommand(gitRoot: string, options: PushCheckOptions): Promise<number> {
   const result = await runPushCheck(gitRoot, options);
   process.stdout.write(formatPushCheckResult(result));
-  return result.pushAllowed ? 0 : 1;
+  // agent-block is intentionally a strong confirmation flow, not an automatic
+  // rejection. The risk remains visible in the result, while the hook lets the
+  // user or agent review the confirmation checklist before continuing.
+  const confirmationMode = Boolean(result.agentBlock);
+  return result.pushAllowed || confirmationMode ? 0 : 1;
 }
 
 export function envConsistencyCheck(lines: DiffLine[], existingEnvExampleKeys = new Set<string>()): EnvFinding[] {
@@ -200,7 +204,8 @@ export function generateAgentBlock(input: { blockedReasons: PushBlockedReason[];
   return [
     "[DEVGUARD_AGENT_CONFIRMATION_REQUIRED]",
     "operation=git_push",
-    `push_blocked=${input.blockedReasons.length > 0}`,
+    "confirmation_required=true",
+    "automatic_block=false",
     `risk=${input.blockedReasons.length > 0 ? "高" : "中"}`,
     "blocked_reasons:",
     ...input.blockedReasons.map((reason) => `- ${formatBlockedReason(reason)}`),
@@ -213,7 +218,7 @@ export function generateAgentBlock(input: { blockedReasons: PushBlockedReason[];
     "4. 変数logを削除、または残す理由を書きましたか？",
     "5. 今回の変更に関係するテストまたは手動確認を行いましたか？",
     "agent_instruction:",
-    "- git push を再実行しないでください。",
+    "- 自動でgit pushをブロックしません。内容を確認してから継続してください。",
     "- hookを回避しないでください。",
     "- required_user_confirmations の内容をユーザーに確認してください。",
     "- ユーザーが確認した場合も、残るリスクを説明してから次の行動を提案してください。",
@@ -231,7 +236,7 @@ export function generateAgentPrompt(): string {
 
 export function formatPushCheckResult(result: PushCheckResult): string {
   const lines: string[] = [];
-  lines.push(`Push: ${result.pushAllowed ? "許可" : "ブロック"}`);
+  lines.push(`Push: ${result.pushAllowed ? "許可" : result.agentBlock ? "強い警告（確認後に継続可能）" : "ブロック"}`);
   lines.push(`リスク: ${formatRiskLevel(result.riskLevel)}`);
 
   if (result.blockedReasons.length > 0) {

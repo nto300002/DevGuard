@@ -109,7 +109,7 @@ describe("push todo and agent block generation", () => {
     expect(todos.map((todo) => todo.category)).toEqual(expect.arrayContaining(["env", "scope", "log", "test"]));
     expect(block).toContain("[DEVGUARD_AGENT_CONFIRMATION_REQUIRED]");
     expect(block).toContain("環境変数またはsecretの追加");
-    expect(block).toContain("git push を再実行しないでください。");
+    expect(block).toContain("自動でgit pushをブロックしません。");
   });
 });
 
@@ -144,17 +144,16 @@ describe("devguard push-check", () => {
     expect(result.blockedReasons).toContain("security_high_risk");
   });
 
-  it("returns exit code 1 for blocked CLI push-check", async () => {
+  it("returns exit code 0 with a strong warning for agent-block CLI push-check", async () => {
     const repo = await createRepo();
     await mkdir(path.join(repo, "src"), { recursive: true });
     await writeFile(path.join(repo, "src", "debug.ts"), "console.log(user);\n");
     await git(repo, ["add", "src/debug.ts"]);
     await git(repo, ["commit", "-m", "add debug"]);
 
-    await expect(execFileAsync(tsxBin, [cliPath, "push-check", "--agent-block"], { cwd: repo })).rejects.toMatchObject({
-      code: 1,
-      stdout: expect.stringContaining("Push: ブロック"),
-    });
+    const { stdout } = await execFileAsync(tsxBin, [cliPath, "push-check", "--agent-block"], { cwd: repo });
+    expect(stdout).toContain("Push: 強い警告（確認後に継続可能）");
+    expect(stdout).toContain("自動でgit pushをブロックしません。");
   });
 
   it("returns exit code 0 for warning-only changes", async () => {

@@ -85,6 +85,7 @@ describe("installHooks", () => {
     expect((await stat(prePushPath)).mode & 0o111).toBeGreaterThan(0);
     expect(await readFile(preCommitPath, "utf8")).toContain("check --staged");
     expect(await readFile(prePushPath, "utf8")).toContain("push-check --agent-block");
+    expect(await readFile(prePushPath, "utf8")).toContain("agent-safecheck");
   });
 
   it("installs hooks in a submodule using git hook path resolution", async () => {

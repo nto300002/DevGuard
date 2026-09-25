@@ -445,11 +445,13 @@ Command:
 npx --yes --package=@nto300002/devguard devguard push-check --agent-block
 ```
 
-Push blockers:
+Push confirmation warnings:
 
 1. Environment or secrets additions
 2. Out-of-scope DB/config changes
 3. Remaining variable logs under `personalStrictLog`
+
+`--agent-block`はpushを自動的に拒否しない。上記の検出を強い警告、確認Todo、AIエージェント向け確認ブロックとして出力し、利用者が内容を確認したうえで継続できる導線を提供する。
 
 ### Security detection modes
 

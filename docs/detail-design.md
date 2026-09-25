@@ -128,7 +128,7 @@ Responsibilities:
 - Support submodule and worktree hook locations where `.git` may be a file or an indirection.
 - When `--include-submodules` is provided, enumerate initialized recursive submodules and install hooks into each repository.
 - Use `npx --yes --package=@nto300002/devguard devguard check --staged` for `pre-commit`.
-- Use `npx --yes --package=@nto300002/devguard devguard push-check --agent-block` for `pre-push`.
+- Use `npx --yes --package=agent-safecheck safecheck push-check --agent-block` for `pre-push`. `--agent-block` is a strong warning and confirmation flow; it must not automatically reject the push.
 
 ### `devguard security-check`
 
