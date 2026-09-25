@@ -293,7 +293,7 @@ npx --yes --package=agent-safecheck safecheck check --staged
 npx --yes --package=agent-safecheck safecheck push-check --agent-block
 ```
 
-High riskのcommit findingがある場合はcommitを停止します。pre-pushの`--agent-block`はpush自体を停止せず、High riskのpush findingに対して強い警告と確認導線を表示します。Security FlowのHigh検出も同様に強い警告の対象です。
+pre-commitでHigh riskのcommit findingが初めて出た場合は、commitを1回停止して強い警告と確認導線を表示します。同じstaged差分で再実行した2回目以降は確認済みとしてcommitを許可します。差分を変更した場合は新しい確認サイクルになります。pre-pushの`--agent-block`はpush自体を停止せず、High riskのpush findingに対して強い警告と確認導線を表示します。Security FlowのHigh検出も同様に強い警告の対象です。
 
 ## Human-on-the-Loop開発フロー
 

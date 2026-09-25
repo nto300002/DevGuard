@@ -116,6 +116,22 @@ describe("staged check units", () => {
     expect(result.risk.level).not.toBe("high");
   });
 
+  it("stops the first high-risk commit once and allows the confirmed retry", async () => {
+    const repo = await createRepo();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "debug.ts"), "console.log(user);\n");
+    await git(repo, ["add", "src/debug.ts"]);
+
+    await expect(execFileAsync(tsxBin, [cliPath, "check", "--staged"], { cwd: repo })).rejects.toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining("🚨 強い警告: 高リスクのcommitを検出しました。"),
+    });
+
+    const { stdout } = await execFileAsync(tsxBin, [cliPath, "check", "--staged"], { cwd: repo });
+    expect(stdout).toContain("⚠️ 強い警告: 高リスクのcommitは確認済みです。");
+    expect(stdout).toContain("確認済みの同一staged差分として、今回のcommitを許可します。");
+  });
+
   it("does not duplicate GitHub Actions secret names as generic keyword findings", () => {
     const findings = detectKeywordFindings([
       added(".github/workflows/cd-backend.yml", 1, "TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}"),

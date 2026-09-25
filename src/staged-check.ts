@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "node:util";
 import { loadConfig, mergeDefaultKeywordDatabase, type DevGuardConfig, type KeywordRule, type WorkflowSecretAllowlistEntry } from "./config.js";
 import { getAllDiff, getStagedDiff, getWorktreeDiff, type ChangedFile, type DiffLine, type GitDiffResult } from "./git-diff.js";
@@ -161,7 +163,84 @@ export async function runCheckStagedCommand(cwd: string, options: RunCheckStaged
   const gitRoot = (await runGit(cwd, ["rev-parse", "--show-toplevel"])).trim();
   const result = await runStagedCheck(gitRoot, options.diffScope ?? "staged");
   process.stdout.write(formatStagedCheckResult(result, options.commandName));
+  if (options.diffScope === "staged" || !options.diffScope) {
+    const confirmation = await applyCommitConfirmation(gitRoot, result);
+    if (confirmation) process.stdout.write(formatCommitConfirmation(confirmation));
+    if (confirmation?.status === "first-warning") return 1;
+    if (confirmation?.status === "confirmed") return 0;
+  }
   return result.risk.exitCode;
+}
+
+type CommitConfirmation = {
+  status: "first-warning" | "confirmed";
+  fingerprint: string;
+};
+
+type CommitConfirmationState = {
+  version: 1;
+  confirmations: Record<string, { confirmedAt: string }>;
+};
+
+async function applyCommitConfirmation(gitRoot: string, result: StagedCheckResult): Promise<CommitConfirmation | null> {
+  if (result.risk.level !== "high") return null;
+  const fingerprint = await getStagedConfirmationFingerprint(gitRoot, result);
+  const statePath = await getCommitConfirmationStatePath(gitRoot);
+  const state = await readCommitConfirmationState(statePath);
+  if (state.confirmations[fingerprint]) return { status: "confirmed", fingerprint };
+
+  state.confirmations[fingerprint] = { confirmedAt: new Date().toISOString() };
+  await mkdir(path.dirname(statePath), { recursive: true });
+  await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  return { status: "first-warning", fingerprint };
+}
+
+async function getStagedConfirmationFingerprint(gitRoot: string, result: StagedCheckResult): Promise<string> {
+  const diff = await runGit(gitRoot, ["diff", "--cached", "--binary", "--no-ext-diff"]);
+  const findings = [
+    ...result.keywordFindings.filter((finding) => finding.severity === "high" && !finding.suppressed).map((finding) => `${finding.id}:${finding.filePath}:${finding.lineNumber ?? 0}`),
+    ...result.logFindings.filter((finding) => finding.severity === "high" && !finding.suppressed).map((finding) => `${finding.id}:${finding.filePath}:${finding.lineNumber ?? 0}`),
+    ...result.securityFindings.filter((finding) => finding.severity === "high" && !finding.suppressed).map((finding) => `${finding.id}:${finding.filePath}:${finding.lineNumber}`),
+    ...result.securityIssues.map((issue) => `${issue.filePath}:${issue.message}`),
+  ].sort().join("\n");
+  return createHash("sha256").update(`${diff}\0${findings}`).digest("hex");
+}
+
+async function getCommitConfirmationStatePath(gitRoot: string): Promise<string> {
+  const gitPath = await runGit(gitRoot, ["rev-parse", "--git-path", "safecheck/commit-confirmations.json"]);
+  return path.isAbsolute(gitPath) ? gitPath : path.resolve(gitRoot, gitPath);
+}
+
+async function readCommitConfirmationState(statePath: string): Promise<CommitConfirmationState> {
+  try {
+    const parsed = JSON.parse(await readFile(statePath, "utf8")) as Partial<CommitConfirmationState>;
+    if (parsed.version === 1 && parsed.confirmations && typeof parsed.confirmations === "object") {
+      return { version: 1, confirmations: parsed.confirmations as Record<string, { confirmedAt: string }> };
+    }
+  } catch {
+    // A missing or invalid local confirmation file starts a new confirmation cycle.
+  }
+  return { version: 1, confirmations: {} };
+}
+
+export function formatCommitConfirmation(confirmation: CommitConfirmation): string {
+  if (confirmation.status === "confirmed") {
+    return [
+      "",
+      "⚠️ 強い警告: 高リスクのcommitは確認済みです。",
+      "確認済みの同一staged差分として、今回のcommitを許可します。",
+      "内容を変更した場合は新しい差分として、再度1回停止します。",
+      "",
+    ].join("\n");
+  }
+  return [
+    "",
+    "🚨 強い警告: 高リスクのcommitを検出しました。",
+    "安全確認のため、今回はcommitを1回停止しました。",
+    "検出内容と人間の確認リストを確認し、同じstaged差分で再実行すると確認済みとしてcommitできます。",
+    "自動的な回避や --no-verify は使用しないでください。",
+    "",
+  ].join("\n");
 }
 
 function getDiffByScope(gitRoot: string, diffScope: RunCheckStagedCommandOptions["diffScope"]): Promise<GitDiffResult> {

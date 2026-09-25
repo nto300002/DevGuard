@@ -917,7 +917,7 @@ Every GitHub issue should include an acceptance checklist that can be verified b
 
 - Low-risk change allows commit.
 - Medium-risk change allows commit with warning.
-- High-risk change blocks commit.
+- The first high-risk commit attempt stops once and prints a strong warning; the same staged diff is allowed on confirmed retry.
 - Environment/secrets addition blocks push.
 - Out-of-scope DB/config change blocks push.
 - Remaining variable log blocks push.

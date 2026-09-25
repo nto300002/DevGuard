@@ -433,7 +433,7 @@ Exit codes:
 | --- | ---: | --- |
 | Low | 0 | Commit passes |
 | Medium | 0 | Warn and commit passes |
-| High | 1 | Commit stops |
+| High (first detection) | 1 | Commit stops once and prints a strong warning; the same staged diff is allowed on confirmed retry |
 | Invalid config | 1 | Commit stops |
 | Internal error | 2 | Commit stops |
 
